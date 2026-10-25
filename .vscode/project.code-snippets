@@ -4,16 +4,16 @@
 		"prefix": "initcom",
 		"body": [
 			"/*",
-			"*",
-			"* ATM Simulator with Security Engineering",
-			"* Developed by Stepanov V., Handziur D., Zolotarov O.",
-			"*",
-			"* Autumn 2026",
-			"*",
-			"* File: ${1:filename}",
-			"* ${2:Small description}",
-			"*",
-			"*/"
+			" *",
+			" * ATM Simulator with Security Engineering",
+			" * Developed by Stepanov V., Handziur D., Zolotarov O.",
+			" *",
+			" * Autumn 2026",
+			" *",
+			" * File: ${1:filename}",
+			" * ${2:Small description}",
+			" *",
+			" */"
 		],
 		"description": "Big initial for a file comment, specific for the project"
 	}
