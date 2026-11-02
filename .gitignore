@@ -164,6 +164,12 @@ _deps
 ### CMake Patch ###
 CMakeUserPresets.json
 
+## Custom CMake rules
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
 # External projects
 *-prefix/
 
@@ -188,6 +194,19 @@ deactivate_run.ps1
 deactivate_run.sh
 environment_run.ps1.env
 environment_run.sh.env
+
+
+## Custom Conan rules
+# Conan layout / build folders
+build/
+CMakeUserPresets.json
+
+# Root folder toolchains
+conan_toolchain.cmake
+CMakeUserPresets.json
+conanbuildinfo.*
+conaninfo.txt
+graph_info.json
 
 ### VisualStudioCode ###
 .vscode/*
