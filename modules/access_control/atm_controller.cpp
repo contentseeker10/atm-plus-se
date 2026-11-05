@@ -11,3 +11,7 @@
  */
 
 #include "atm_controller.hpp"
+
+void AtmController::transition_to(std::unique_ptr<IAtmState> new_state) {
+    _current_state = std::move(new_state);
+}
