@@ -1,6 +1,9 @@
 # Created by https://www.toptal.com/developers/gitignore/api/c++,visualstudio,visualstudiocode,clion,cmake,conan
 # Edit at https://www.toptal.com/developers/gitignore?templates=c++,visualstudio,visualstudiocode,clion,cmake,conan
 
+### Other ###
+*.pdf
+
 ### C++ ###
 # Prerequisites
 *.d
