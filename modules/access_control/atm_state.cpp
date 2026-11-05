@@ -12,8 +12,8 @@
 
 #include "atm_state.hpp"
 
-std::string_view IdleState::get_state_name()            noexcept { return "Idle"; }
-std::string_view CardInsertedState::get_state_name()    noexcept { return "CardInserted"; }
-std::string_view CustomerSessionState::get_state_name() noexcept { return "CustomerSession"; }
-std::string_view EngineerSessionState::get_state_name() noexcept { return "EngineerSession"; }
+std::string_view IdleState::_get_state_name()            noexcept { return "Idle"; }
+std::string_view CardInsertedState::_get_state_name()    noexcept { return "CardInserted"; }
+std::string_view CustomerSessionState::_get_state_name() noexcept { return "CustomerSession"; }
+std::string_view EngineerSessionState::_get_state_name() noexcept { return "EngineerSession"; }
 
