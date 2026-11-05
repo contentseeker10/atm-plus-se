@@ -13,6 +13,7 @@
 #pragma once
 
 #include "atm_state.hpp"
+#include "auth_service.hpp"
 
 #include <memory>
 #include <optional>
@@ -21,18 +22,7 @@
 class SessionContext;
 class CashVault;
 class DatabaseManager;
-// class AuthService;
 class AuditLog;
-
-using Denomination = uint64_t;
-
-enum class ServiceType {
-    Withdrawal,
-    Deposit,
-    Transfer,
-    BalanceInquiry,
-    EngineerMaintenance
-};
 
 class AtmController {
 public:
@@ -53,5 +43,5 @@ private:
     std::shared_ptr<DatabaseManager> _db;
     std::shared_ptr<AuditLog>        _audit_log;
 
-    // AuthService                      _auth_service;
+    AuthService                      _auth_service;
 };

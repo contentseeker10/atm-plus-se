@@ -24,4 +24,17 @@ enum class UserRole {
     Customer,
     Engineer,
     None
-}
+};
+
+enum class Denomination {
+    D_10 = 1000,
+    D_20 = 2000,
+    D_50 = 5000,
+    D_100 = 10000,
+    D_200 = 20000,
+    D_500 = 50000
+};
+
+enum class AuthError {
+
+};

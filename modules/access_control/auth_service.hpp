@@ -20,7 +20,6 @@
 
 class DatabaseManager;
 class AuditLog;
-class AuthError;
 
 class AuthService {
 public:
