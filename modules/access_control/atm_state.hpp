@@ -12,13 +12,13 @@
 
 #pragma once
 
+#include "enums.hpp"
+
 #include <string_view>
 #include <expected>
 
 class AtmError;
 class AtmController;
-
-enum class ServiceType;
 
 class IAtmState {
 public:
