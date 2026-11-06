@@ -18,20 +18,21 @@
 #include <chrono>
 
 class SessionContext {
+    using clock = std::chrono::steady_clock;
 public:
     std::string session_id;
     std::string card_number;
 
     UserRole role{UserRole::None};
 
-    std::chrono::steady_clock::time_point last_activity;
+    clock::time_point last_activity;
 
     uint64_t current_nonce{};
 public:
-    void touch() noexcept;
+    void touch() noexcept { last_activity = clock::now(); }
     
-    bool is_expired(std::chrono::seconds timeout) const noexcept;
-    bool is_authenticated()                       const noexcept;
+    bool is_expired(std::chrono::seconds timeout) const noexcept { return (clock::now() - last_activity) < timeout; };
+    bool is_authenticated()                       const noexcept { return role != UserRole::None; }
 
-    uint64_t next_nonce() noexcept;
+    uint64_t next_nonce() noexcept { return ++current_nonce; };
 };
