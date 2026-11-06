@@ -6,8 +6,15 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(httplib REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(SQLite3 REQUIRED)
+
 add_executable(AtmPlusSe 
     main/main.cpp
+
+    core/http_server.cpp
+    core/db.cpp
 
     modules/access_control/atm_state.cpp
     modules/access_control/atm_controller.cpp
@@ -16,6 +23,10 @@ add_executable(AtmPlusSe
 )
 
 target_include_directories(AtmPlusSe PRIVATE include)
+
+target_link_libraries(AtmPlusSe PRIVATE httplib::httplib)
+target_link_libraries(AtmPlusSe PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(AtmPlusSe PRIVATE SQLite::SQLite3)
 
 if (MSVC)
     add_compile_options(/Wall /utf-8)
