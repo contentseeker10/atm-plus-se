@@ -13,12 +13,13 @@ find_package(SQLite3 REQUIRED)
 add_executable(AtmPlusSe 
     main/main.cpp
 
+    core/http_server.cpp
+    core/db.cpp
+
     modules/access_control/atm_state.cpp
     modules/access_control/atm_controller.cpp
     modules/access_control/auth_service.cpp
     modules/access_control/session_context.cpp
-    
-    modules/http_server/http_server.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE include)
