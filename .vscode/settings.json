@@ -1,0 +1,8 @@
+{
+  "cmake.configureSettings": {
+    "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/out/build/generators/conan_toolchain.cmake"
+  },
+  "cmake.generator": "Visual Studio 18 2026",
+  "cmake.platform": "x64",
+  "cmake.toolset": "host=x86"
+}
