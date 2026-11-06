@@ -39,7 +39,7 @@ class IdleState : public IAtmState {
 public:
     std::expected<void, AtmError> insert_card(AtmController& ctx, std::string_view card_number);
 private:
-    std::string_view _get_state_name() noexcept;
+    std::string_view _get_state_name() noexcept { return "Idle"; };
 };
 
 class CardInsertedState : public IAtmState {
@@ -47,7 +47,7 @@ public:
     std::expected<void, AtmError> enter_pin(AtmController& ctx, std::string_view pin);
     std::expected<void, AtmError> eject_card(AtmController& ctx);
 private:
-    std::string_view _get_state_name() noexcept;
+    std::string_view _get_state_name() noexcept { return "CardInserted"; };
 };
 
 class CustomerSessionState : public IAtmState {
@@ -55,7 +55,7 @@ public:
     std::expected<void, AtmError> select_service(AtmController& ctx, ServiceType service);
     std::expected<void, AtmError> eject_card(AtmController& ctx);
 private:
-    std::string_view _get_state_name() noexcept;
+    std::string_view _get_state_name() noexcept { return "CustomerSession"; };
 };
 
 class EngineerSessionState : public IAtmState {
@@ -63,5 +63,5 @@ public:
     std::expected<void, AtmError> open_vault(AtmController& ctx, std::string_view engineer_key);
     std::expected<void, AtmError> eject_card(AtmController& ctx);
 private:
-    std::string_view _get_state_name() noexcept;
+    std::string_view _get_state_name() noexcept { return "EngineerSession"; };
 };
