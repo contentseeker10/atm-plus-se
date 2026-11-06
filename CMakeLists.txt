@@ -11,6 +11,8 @@ add_executable(AtmPlusSe
 
     modules/access_control/atm_state.cpp
     modules/access_control/atm_controller.cpp
+    modules/access_control/auth_service.cpp
+    modules/access_control/session_context.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE include)
