@@ -14,12 +14,12 @@
 
 #include "atm_state.hpp"
 #include "auth_service.hpp"
+#include "session_context.hpp"
 
 #include <memory>
 #include <optional>
 #include <vector>
 
-class SessionContext;
 class CashVault;
 class DatabaseManager;
 class AuditLog;
