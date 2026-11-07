@@ -44,7 +44,11 @@ enum class AtmError {
     Unauthorized,
     VaultAccessDenied,
     HardwareFailure,
-    InternalError
+    InternalError,
+    InsufficientCashInAtm,
+    InvalidAmount,
+    CassetteFull,
+    VaultDoorOpen
 };
 
 enum class AuthError {

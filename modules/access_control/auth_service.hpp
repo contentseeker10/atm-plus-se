@@ -13,12 +13,12 @@
 #pragma once
 
 #include "enums.hpp"
+#include "db.hpp"
 
 #include <string_view>
 #include <expected>
 #include <memory>
 
-class DatabaseManager;
 class AuditLog;
 
 class AuthService {

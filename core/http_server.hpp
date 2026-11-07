@@ -16,14 +16,17 @@
 
 #include <httplib.h>
 
-constexpr std::string_view HOST = "0.0.0.0";
+inline constexpr auto HOST = "0.0.0.0";
 
 class HttpServerAdapter {
 public:
     HttpServerAdapter(std::shared_ptr<AtmController> controller, int port = 8080) 
     : _atm_controller{controller}, _port{port} {}
 
-    void start() { _server.listen(HOST, _port); }
+    void start() {
+        register_routes(); 
+        _server.listen(HOST, _port); 
+    }
     void stop() noexcept { _server.stop(); };
 
     void register_routes();

@@ -22,7 +22,6 @@
 #include <map>
 
 class Account;
-class DbError;
 
 class DatabaseManager {
 public:
@@ -34,7 +33,7 @@ public:
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory();
 private:
     struct SqliteDeleter {
-        void operator()(sqlite3* db) const { sqlite3_close(db); }
+        void operator()(sqlite3* db) const { sqlite3_close_v2(db); }
     };
 
     std::unique_ptr<sqlite3, SqliteDeleter> _handle;
