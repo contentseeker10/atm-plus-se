@@ -33,5 +33,6 @@ std::expected<std::string, CryptoError> AuditLog::append_record(const LedgerEntr
 }
 
 std::expected<bool, CryptoError> AuditLog::verify_integrity_chain() const {
-    
+    // TODO: implement once DB is ready
+    return true;
 }

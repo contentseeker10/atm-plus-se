@@ -53,7 +53,7 @@ void AntiReplayManager::reset_session(std::string_view session_id) {
     _session_nonces.erase(std::string(session_id));
 }
 
-void AntiReplayManager::register_session(std::string_view session_id, uint64_t initial_nonce = 0) {
+void AntiReplayManager::register_session(std::string_view session_id, uint64_t initial_nonce) {
     std::unique_lock lock(_mtx);
     _session_nonces[std::string(session_id)] = initial_nonce;
 }

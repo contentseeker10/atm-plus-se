@@ -22,7 +22,7 @@
 class AuditLog {
 public:
     AuditLog(std::shared_ptr<DatabaseManager> db, std::string hmac_secret_key) 
-    : _db{std::move(db)}, _hmac_secret_key{std::move(hmac_secret_key)} {} 
+    : _db{std::move(db)}, _hmac_secret_key{std::move(hmac_secret_key)}, _curr_chain_hash_head{std::string(64, '0')} {} 
     ~AuditLog() = default;
 
     AuditLog(const AuditLog&)            = delete;
