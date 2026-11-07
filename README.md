@@ -24,5 +24,8 @@ atm-plus-se/
 **Database:**
 - SQLite3
 
+**Security:**
+- OpenSSL
+
 **Frontend:**
 - Pure HTML/CSS/JS
