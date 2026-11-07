@@ -22,6 +22,9 @@ add_executable(AtmPlusSe
     modules/access_control/session_context.cpp
     modules/cash/cash_vault.cpp
     modules/cash/cassette.cpp
+    modules/accounts/account.cpp
+    modules/accounts/checking_account.cpp
+    modules/accounts/savings_account.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 
