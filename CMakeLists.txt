@@ -23,11 +23,15 @@ add_executable(AtmPlusSe
     modules/access_control/auth_service.cpp
     modules/access_control/session_context.cpp
     modules/access_control/anti_replay.cpp
+
     modules/cash/cash_vault.cpp
     modules/cash/cassette.cpp
+
     modules/accounts/account.cpp
     modules/accounts/checking_account.cpp
     modules/accounts/savings_account.cpp
+    
+    modules/accounting/ledger.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 
