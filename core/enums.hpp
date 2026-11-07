@@ -36,9 +36,32 @@ enum class Denomination {
 };
 
 enum class AtmError {
-    InvalidStateTransition
+    InvalidStateTransition,
+    NoActiveSession,
+    SessionExpired,
+    InvalidSessionToken,
+    ReplayAttackDetected,
+    Unauthorized,
+    VaultAccessDenied,
+    HardwareFailure,
+    InternalError
 };
 
 enum class AuthError {
+    CardNotFound,
+    CardBlocked,
+    InvalidPin,
+    MaxAttemptsExceeded,
+    CardExpired,
+    CryptoVerificationFailed,
+    DatabaseError
+};
 
+enum class DbError {
+    ConnectionFailed,
+    QueryFailed,
+    RecordNotFound,
+    ConstraintViolation,
+    TransactionFailed,
+    Busy
 };
