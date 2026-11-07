@@ -17,8 +17,19 @@
 
 #include "ledger.hpp"
 
+#include <mutex>
+
 class AuditLog {
 public:
+    AuditLog(std::shared_ptr<DatabaseManager> db, std::string hmac_secret_key) 
+    : _db{std::move(db)}, _hmac_secret_key{std::move(hmac_secret_key)} {} 
+    ~AuditLog() = default;
+
+    AuditLog(const AuditLog&)            = delete;
+    AuditLog& operator=(const AuditLog&) = delete;
+    AuditLog(AuditLog&&)                 = delete;
+    AuditLog& operator=(AuditLog&&)      = delete;
+
     std::expected<std::string, CryptoError> append_record(const LedgerEntry& entry, uint64_t nonce);
     std::expected<bool, CryptoError> verify_integrity_chain() const;
     
@@ -28,4 +39,6 @@ private:
     
     std::string _curr_chain_hash_head;
     std::string _hmac_secret_key;
+
+    mutable std::mutex _mtx;
 };

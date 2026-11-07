@@ -32,6 +32,7 @@ add_executable(AtmPlusSe
     modules/accounts/savings_account.cpp
     
     modules/accounting/ledger.cpp
+    modules/accounting/audit.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 

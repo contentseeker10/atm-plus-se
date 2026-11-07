@@ -69,3 +69,12 @@ enum class DbError {
     TransactionFailed,
     Busy
 };
+
+enum class CryptoError {
+    HashMismatch,
+    HmacVerificationFailed,
+    DatabaseError,
+    EntryNotBalanced,
+    InvalidPreviousHash,
+    InternalError
+};
