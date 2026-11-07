@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(httplib REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(SQLite3 REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 add_executable(AtmPlusSe 
     main/main.cpp
@@ -22,6 +23,7 @@ add_executable(AtmPlusSe
     modules/access_control/session_context.cpp
     modules/cash/cash_vault.cpp
     modules/cash/cassette.cpp
+    core/crypto.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 
@@ -33,6 +35,7 @@ target_include_directories(AtmPlusSe PRIVATE
 target_link_libraries(AtmPlusSe PRIVATE httplib::httplib)
 target_link_libraries(AtmPlusSe PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(AtmPlusSe PRIVATE SQLite::SQLite3)
+target_link_libraries(AtmPlusSe PRIVATE openssl::openssl)
 
 if (MSVC)
     add_compile_options(/Wall /utf-8)
