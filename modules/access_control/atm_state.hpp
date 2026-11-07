@@ -14,54 +14,61 @@
 
 #include "enums.hpp"
 
+#include "atm_controller.hpp"
+
 #include <string_view>
 #include <expected>
-
-class AtmError;
-class AtmController;
 
 class IAtmState {
 public:
     virtual ~IAtmState() = default;
 
-    std::string_view get_state_name(this auto& self) noexcept {
-        return self._get_state_name();
-    }
+    [[nodiscard]] virtual std::string_view get_state_name() const noexcept = 0;
     
-    std::expected<void, AtmError> insert_card(AtmController& ctx, std::string_view card_number);
-    std::expected<void, AtmError> enter_pin(AtmController& ctx, std::string_view pin);
-    std::expected<void, AtmError> select_service(AtmController& ctx, ServiceType service);
-    std::expected<void, AtmError> eject_card(AtmController& ctx);
-    std::expected<void, AtmError> open_vault(AtmController& ctx, std::string_view engineer_key);
+    virtual std::expected<void, AtmError> insert_card(AtmController& ctx, std::string_view card_number) {
+        return std::unexpected(AtmError::InvalidStateTransition);
+    }
+    virtual std::expected<void, AtmError> enter_pin(AtmController& ctx, std::string_view pin) {
+        return std::unexpected(AtmError::InvalidStateTransition);
+    }
+    virtual std::expected<void, AtmError> select_service(AtmController& ctx, ServiceType service) {
+        return std::unexpected(AtmError::InvalidStateTransition);
+    }
+    virtual std::expected<void, AtmError> eject_card(AtmController& ctx) {
+        return std::unexpected(AtmError::InvalidStateTransition);
+    }
+    virtual std::expected<void, AtmError> open_vault(AtmController& ctx, std::string_view engineer_key) {
+        return std::unexpected(AtmError::InvalidStateTransition);
+    }
 };
 
 class IdleState : public IAtmState {
 public:
-    std::expected<void, AtmError> insert_card(AtmController& ctx, std::string_view card_number);
-private:
-    std::string_view _get_state_name() noexcept { return "Idle"; };
+    [[nodiscard]] std::string_view get_state_name() const noexcept override { return "Idle"; };
+    
+    std::expected<void, AtmError> insert_card(AtmController& ctx, std::string_view card_number) override;
 };
 
 class CardInsertedState : public IAtmState {
 public:
-    std::expected<void, AtmError> enter_pin(AtmController& ctx, std::string_view pin);
-    std::expected<void, AtmError> eject_card(AtmController& ctx);
-private:
-    std::string_view _get_state_name() noexcept { return "CardInserted"; };
+    [[nodiscard]] std::string_view get_state_name() const noexcept override { return "CardInserted"; };
+    
+    std::expected<void, AtmError> enter_pin(AtmController& ctx, std::string_view pin) override;
+    std::expected<void, AtmError> eject_card(AtmController& ctx) override;
 };
 
 class CustomerSessionState : public IAtmState {
 public:
-    std::expected<void, AtmError> select_service(AtmController& ctx, ServiceType service);
-    std::expected<void, AtmError> eject_card(AtmController& ctx);
-private:
-    std::string_view _get_state_name() noexcept { return "CustomerSession"; };
+    [[nodiscard]] std::string_view get_state_name() const noexcept override { return "CustomerSession"; };
+    
+    std::expected<void, AtmError> select_service(AtmController& ctx, ServiceType service) override;
+    std::expected<void, AtmError> eject_card(AtmController& ctx) override;
 };
 
 class EngineerSessionState : public IAtmState {
 public:
-    std::expected<void, AtmError> open_vault(AtmController& ctx, std::string_view engineer_key);
-    std::expected<void, AtmError> eject_card(AtmController& ctx);
-private:
-    std::string_view _get_state_name() noexcept { return "EngineerSession"; };
+    [[nodiscard]] std::string_view get_state_name() const noexcept override { return "EngineerSession"; };
+    
+    std::expected<void, AtmError> open_vault(AtmController& ctx, std::string_view engineer_key) override;
+    std::expected<void, AtmError> eject_card(AtmController& ctx) override;
 };

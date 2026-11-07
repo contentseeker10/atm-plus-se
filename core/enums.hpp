@@ -35,6 +35,10 @@ enum class Denomination {
     D_500 = 50000
 };
 
+enum class AtmError {
+    InvalidStateTransition
+};
+
 enum class AuthError {
 
 };

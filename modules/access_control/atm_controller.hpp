@@ -29,7 +29,7 @@ public:
     void transition_to(std::unique_ptr<IAtmState> new_state);
     
     std::expected<void, AtmError> process_insert_card(std::string_view card);
-    std::expected<void, AtmError> process_enter_pin(std::string_view card);
+    std::expected<void, AtmError> process_enter_pin(std::string_view pin);
     std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
 
