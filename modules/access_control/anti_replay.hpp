@@ -19,6 +19,7 @@
 #include <mutex>
 
 class AntiReplayManager {
+    using clock = std::chrono::steady_clock;
 public:
     AntiReplayManager()  = default;
     ~AntiReplayManager() = default;
@@ -35,8 +36,8 @@ public:
     void reset_session(std::string_view session_id);
     void register_session(std::string_view session_id, uint64_t initial_nonce = 0);
 private:
-    std::unordered_set<std::string>           _seen_idemp_keys;
-    std::unordered_map<std::string, uint64_t> _session_nonces;
+    std::unordered_map<std::string, clock::time_point> _seen_idemp_keys;
+    std::unordered_map<std::string, uint64_t>          _session_nonces;
 
     mutable std::mutex _mtx;
 };
