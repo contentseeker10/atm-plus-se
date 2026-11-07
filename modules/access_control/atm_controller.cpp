@@ -14,6 +14,8 @@
 
 #include "cash/cash_vault.hpp"
 
+constexpr std::chrono::seconds TIMEOUT = 60s; 
+
 AtmController::AtmController(
     std::unique_ptr<CashVault> vault, 
     std::shared_ptr<DatabaseManager> db, 
@@ -29,3 +31,26 @@ AtmController::~AtmController() = default;
 void AtmController::transition_to(std::unique_ptr<IAtmState> new_state) {
     _current_state = std::move(new_state);
 }
+
+std::expected<void, AtmError> AtmController::validate_active_session() {
+    if(!_active_session.has_value()) {
+        return std::unexpected(AtmError::NoActiveSession);
+    }
+    if (!_active_session->is_expired(TIMEOUT)) {
+        end_session();
+        return std::unexpected(AtmError::SessionExpired);
+    }
+    _active_session->touch();
+    return {};
+}
+
+std::optional<std::string> AtmController::get_active_session_id() const {
+    if (!_active_session.has_value() ) {
+        return std::nullopt;
+    }
+    if (_active_session->is_expired(TIMEOUT)) {
+        return std::nullopt;
+    }
+    return _active_session->session_id;
+}
+
