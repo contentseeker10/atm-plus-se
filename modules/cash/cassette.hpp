@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "../access_control/enums.hpp"
+#include "enums.hpp"
 #include "vault_error.hpp"
 #include <expected>
 

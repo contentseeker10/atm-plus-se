@@ -20,9 +20,15 @@ add_executable(AtmPlusSe
     modules/access_control/atm_controller.cpp
     modules/access_control/auth_service.cpp
     modules/access_control/session_context.cpp
+    modules/cash/cash_vault.cpp
+    modules/cash/cassette.cpp
 )
 
-target_include_directories(AtmPlusSe PRIVATE include)
+target_include_directories(AtmPlusSe PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/modules
+)
 
 target_link_libraries(AtmPlusSe PRIVATE httplib::httplib)
 target_link_libraries(AtmPlusSe PRIVATE nlohmann_json::nlohmann_json)

@@ -12,11 +12,11 @@
 
 #pragma once
 
-#include "../modules/access_control/atm_controller.hpp"
+#include "access_control/atm_controller.hpp"
 
 #include <httplib.h>
 
-constexpr std::string HOST = "0.0.0.0";
+constexpr std::string_view HOST = "0.0.0.0";
 
 class HttpServerAdapter {
 public:
