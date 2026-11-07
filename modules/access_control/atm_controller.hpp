@@ -23,6 +23,8 @@
 #include <vector>
 #include <mutex>
 
+using namespace std::literals::chrono_literals;
+
 class CashVault;
 class AuditLog;
 
@@ -48,6 +50,12 @@ public:
     std::expected<void, AtmError> process_enter_pin(std::string_view pin);
     std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
+
+    std::expected<void, AtmError> validate_active_session(); 
+
+    std::optional<std::string> get_active_session_id() const;
+
+    std::string_view get_current_state_name() const { _current_state->get_state_name(); }
 
     void end_session() noexcept;
 private:

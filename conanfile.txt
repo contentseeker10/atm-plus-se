@@ -2,6 +2,7 @@
 cpp-httplib/0.62.0
 nlohmann_json/3.12.0
 sqlite3/3.54.1
+openssl/4.1.0
 
 [generators]
 CMakeDeps
