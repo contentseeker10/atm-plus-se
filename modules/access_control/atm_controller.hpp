@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include "db.hpp"
+
 #include "atm_state.hpp"
 #include "auth_service.hpp"
 #include "session_context.hpp"
@@ -19,15 +21,29 @@
 #include <memory>
 #include <optional>
 #include <vector>
+#include <mutex>
 
 class CashVault;
-class DatabaseManager;
 class AuditLog;
 
 class AtmController {
 public:
+    AtmController(
+        std::unique_ptr<CashVault> vault, 
+        std::shared_ptr<DatabaseManager> db, 
+        std::shared_ptr<AuditLog> log, 
+        AuthService auth
+    );
+    ~AtmController();
+
+    AtmController(const AtmController&)            = delete;
+    AtmController& operator=(const AtmController&) = delete;
+
+    AtmController(AtmController&&)                 = delete;
+    AtmController& operator=(AtmController&&)      = delete;
+
     void transition_to(std::unique_ptr<IAtmState> new_state);
-    
+
     std::expected<void, AtmError> process_insert_card(std::string_view card);
     std::expected<void, AtmError> process_enter_pin(std::string_view pin);
     std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
@@ -35,13 +51,15 @@ public:
 
     void end_session() noexcept;
 private:
-    std::optional<SessionContext>    _active_session;
+    std::optional<SessionContext>    _active_session{std::nullopt};
 
-    std::unique_ptr<IAtmState>       _current_state;
+    std::unique_ptr<IAtmState>       _current_state{std::make_unique<IdleState>()};
     std::unique_ptr<CashVault>       _vault;
 
     std::shared_ptr<DatabaseManager> _db;
     std::shared_ptr<AuditLog>        _audit_log;
 
     AuthService                      _auth_service;
+
+    mutable std::mutex               _fsm_mtx;
 };

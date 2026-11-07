@@ -14,10 +14,10 @@
 
 #include "enums.hpp"
 
-#include "atm_controller.hpp"
-
 #include <string_view>
 #include <expected>
+
+class AtmController;
 
 class IAtmState {
 public:
