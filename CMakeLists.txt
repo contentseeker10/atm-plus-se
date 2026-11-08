@@ -31,6 +31,7 @@ add_executable(AtmPlusSe
     
     modules/accounting/ledger.cpp
     modules/accounting/audit.cpp
+    modules/access_control/atm_state.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 

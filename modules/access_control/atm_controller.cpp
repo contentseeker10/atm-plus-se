@@ -16,39 +16,6 @@
 
 constexpr std::chrono::seconds TIMEOUT = 60s; 
 
-std::expected<void, AtmError> IdleState::insert_card(AtmController& ctx, std::string_view card_number) {
-    // TODO: somehow select user role Customer/Engineer
-    auto role = UserRole::Customer;
-
-    ctx.start_session(card_number, role);
-    ctx.transition_to(std::make_unique<CardInsertedState>());
-    return {};
-}
-
-std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& /*ctx*/, std::string_view /*pin*/) {
-    return {};
-}
-
-std::expected<void, AtmError> CardInsertedState::eject_card(AtmController& /*ctx*/) {
-    return {};
-}
-
-std::expected<void, AtmError> CustomerSessionState::select_service(AtmController& /*ctx*/, ServiceType /*service*/) {
-    return {};
-}
-
-std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& /*ctx*/) {
-    return {};
-}
-
-std::expected<void, AtmError> EngineerSessionState::open_vault(AtmController& /*ctx*/, std::string_view /*engineer_key*/) {
-    return {};
-}
-
-std::expected<void, AtmError> EngineerSessionState::eject_card(AtmController& /*ctx*/) {
-    return {};
-}
-
 AtmController::AtmController(
     std::unique_ptr<CashVault> vault, 
     std::shared_ptr<DatabaseManager> db, 
