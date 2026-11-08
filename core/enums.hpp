@@ -58,6 +58,16 @@ enum class AtmError {
     DatabaseError
 };
 
+enum class AuthError {
+    CardNotFound,
+    CardBlocked,
+    InvalidPin,
+    MaxAttemptsExceeded,
+    CardExpired,
+    CryptoVerificationFailed,
+    DatabaseError
+};
+
 constexpr AtmError to_atm_error(AuthError err) noexcept {
     switch (err) {
         case AuthError::CardNotFound:             return AtmError::CardNotFound;
@@ -70,16 +80,6 @@ constexpr AtmError to_atm_error(AuthError err) noexcept {
         default:                                  return AtmError::Unauthorized;
     }
 }
-
-enum class AuthError {
-    CardNotFound,
-    CardBlocked,
-    InvalidPin,
-    MaxAttemptsExceeded,
-    CardExpired,
-    CryptoVerificationFailed,
-    DatabaseError
-};
 
 enum class DbError {
     ConnectionFailed,

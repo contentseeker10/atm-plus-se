@@ -22,6 +22,10 @@ std::expected<void, AtmError> IdleState::insert_card(AtmController& ctx, std::st
 std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& ctx, std::string_view pin) {
     auto role = ctx.authenticate_current_card(pin);
     if (!role.has_value()) {
+        if (role.error() == AtmError::MaxAttemptsExceeded || role.error() == AtmError::CardBlocked) {
+            ctx.end_session();
+            ctx.transition_to(std::make_unique<IdleState>());
+        }
         return std::unexpected(role.error());
     }
     if (role.value() == UserRole::Customer) {

@@ -17,7 +17,6 @@ std::expected<UserRole, AuthError> AuthService::authenticate_card(std::string_vi
 }
 
 std::expected<void, AuthError> AuthService::reset_failed_attempts(std::string_view card) {
-    // TODO: UPDATE the DB accordingly
-    kMaxFailedAttempts = 3;
+    // TODO: UPDATE attempts in DB
     return {};
 }
