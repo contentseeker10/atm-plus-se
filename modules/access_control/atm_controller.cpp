@@ -16,6 +16,39 @@
 
 constexpr std::chrono::seconds TIMEOUT = 60s; 
 
+std::expected<void, AtmError> IdleState::insert_card(AtmController& ctx, std::string_view card_number) {
+    // TODO: somehow select user role Customer/Engineer
+    auto role = UserRole::Customer;
+
+    ctx.start_session(card_number, role);
+    ctx.transition_to(std::make_unique<CardInsertedState>());
+    return {};
+}
+
+std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& /*ctx*/, std::string_view /*pin*/) {
+    return {};
+}
+
+std::expected<void, AtmError> CardInsertedState::eject_card(AtmController& /*ctx*/) {
+    return {};
+}
+
+std::expected<void, AtmError> CustomerSessionState::select_service(AtmController& /*ctx*/, ServiceType /*service*/) {
+    return {};
+}
+
+std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& /*ctx*/) {
+    return {};
+}
+
+std::expected<void, AtmError> EngineerSessionState::open_vault(AtmController& /*ctx*/, std::string_view /*engineer_key*/) {
+    return {};
+}
+
+std::expected<void, AtmError> EngineerSessionState::eject_card(AtmController& /*ctx*/) {
+    return {};
+}
+
 AtmController::AtmController(
     std::unique_ptr<CashVault> vault, 
     std::shared_ptr<DatabaseManager> db, 
@@ -33,23 +66,19 @@ void AtmController::transition_to(std::unique_ptr<IAtmState> new_state) {
     _current_state = std::move(new_state);
 }
 
-std::expected<void, AtmError> AtmController::process_insert_card(std::string_view card) {
+void AtmController::start_session(std::string_view card, UserRole role) {
     std::unique_lock lock(_mtx);
-    if (_current_state->get_state_name() != "Idle") {
-        return std::unexpected(AtmError::InvalidStateTransition);
-    }
-    std::unique_ptr<IAtmState> state = std::make_unique<CardInsertedState>();
-    transition_to(std::move(state));
 
     // TODO: generate session id?
-    std::string_view session_id("example");
+    std::string session_id("example");
 
-    // TODO: somehow select user role Customer/Engineer
-    auto role = UserRole::Customer;
-
-    SessionContext session(session_id, card, UserRole::Customer);
+    SessionContext session(session_id, std::string(card), role);
     _active_session.emplace(session);
+}
 
+std::expected<void, AtmError> AtmController::process_insert_card(std::string_view card) {
+    std::unique_lock lock(_mtx);
+    _current_state->insert_card(*this, card);
     return {};
 }
 
@@ -79,5 +108,5 @@ std::optional<std::string_view> AtmController::get_active_session_id() const {
 
 void AtmController::end_session() noexcept {
     std::unique_lock lock(_mtx);
-    _active_session.emplace(std::nullopt);
+    _active_session.reset();
 }
