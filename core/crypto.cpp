@@ -76,10 +76,10 @@ namespace crypto
     std::string hmac_sha256_hex(std::string_view data, std::string_view key) {
         std::array<uint8_t, 32> mac{};
         size_t out_len = 0;
-        if (*(EVP_Q_mac(nullptr, "HMAC", nullptr, "SHA256", nullptr,
+        if (EVP_Q_mac(nullptr, "HMAC", nullptr, "SHA256", nullptr,
                     key.data(), key.size(),
                     reinterpret_cast<const uint8_t*>(data.data()), data.size(),
-                    mac.data(), mac.size(), &out_len)) != 1 || out_len != mac.size()) {
+                    mac.data(), mac.size(), &out_len) != nullptr || out_len != mac.size()) {
             throw std::runtime_error("EVP_Q_mac failed for HMAC-SHA256");
         }
         return to_hex(mac.data(), mac.size());

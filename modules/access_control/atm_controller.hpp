@@ -55,7 +55,7 @@ public:
 
     std::optional<std::string> get_active_session_id() const;
 
-    std::string_view get_current_state_name() const { _current_state->get_state_name(); }
+    std::string_view get_current_state_name() const { return _current_state->get_state_name(); }
 
     void end_session() noexcept;
 private:

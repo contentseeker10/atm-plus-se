@@ -36,7 +36,7 @@ std::expected<void, AtmError> AtmController::validate_active_session() {
     if(!_active_session.has_value()) {
         return std::unexpected(AtmError::NoActiveSession);
     }
-    if (!_active_session->is_expired(TIMEOUT)) {
+    if (_active_session->is_expired(TIMEOUT)) {
         end_session();
         return std::unexpected(AtmError::SessionExpired);
     }
