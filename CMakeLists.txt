@@ -17,21 +17,23 @@ add_executable(AtmPlusSe
     core/http_server.cpp
     core/db.cpp
     core/crypto.cpp
+
     modules/access_control/atm_controller.cpp
+    modules/access_control/atm_state.cpp
     modules/access_control/auth_service.cpp
     modules/access_control/session_context.cpp
-    modules/access_control/anti_replay.cpp
-
+    
     modules/cash/cash_vault.cpp
     modules/cash/cassette.cpp
-
+    
     modules/accounts/account.cpp
     modules/accounts/checking_account.cpp
     modules/accounts/savings_account.cpp
     
     modules/accounting/ledger.cpp
     modules/accounting/audit.cpp
-    modules/access_control/atm_state.cpp
+    
+    modules/security/anti_replay.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 
