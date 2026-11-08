@@ -17,8 +17,6 @@ add_executable(AtmPlusSe
     core/http_server.cpp
     core/db.cpp
     core/crypto.cpp
-
-    modules/access_control/atm_state.cpp
     modules/access_control/atm_controller.cpp
     modules/access_control/auth_service.cpp
     modules/access_control/session_context.cpp
@@ -33,6 +31,7 @@ add_executable(AtmPlusSe
     
     modules/accounting/ledger.cpp
     modules/accounting/audit.cpp
+    modules/access_control/atm_state.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 

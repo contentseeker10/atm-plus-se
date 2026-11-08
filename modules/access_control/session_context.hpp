@@ -20,12 +20,15 @@
 class SessionContext {
     using clock = std::chrono::steady_clock;
 public:
+    SessionContext(std::string id, std::string card_num)
+    : session_id{std::move(id)}, card_number{std::move(card_num)} {}
+
     std::string session_id;
     std::string card_number;
 
     UserRole role{UserRole::None};
 
-    clock::time_point last_activity;
+    clock::time_point last_activity{clock::now()};
 
     uint64_t current_nonce{};
 public:

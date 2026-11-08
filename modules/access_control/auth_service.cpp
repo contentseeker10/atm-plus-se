@@ -11,3 +11,12 @@
  */
 
 #include "auth_service.hpp"
+
+std::expected<UserRole, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
+    return {};
+}
+
+std::expected<void, AuthError> AuthService::reset_failed_attempts(std::string_view card) {
+    // TODO: UPDATE attempts in DB
+    return {};
+}
