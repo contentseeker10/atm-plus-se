@@ -34,6 +34,11 @@ add_executable(AtmPlusSe
     modules/accounting/audit.cpp
     
     modules/security/anti_replay.cpp
+
+    modules/storage/operations.cpp
+    modules/storage/row_mapping.cpp
+    modules/storage/sqlite_utils.cpp
+    modules/storage/transaction.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 
