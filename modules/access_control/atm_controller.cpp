@@ -29,12 +29,12 @@ AtmController::AtmController(
 AtmController::~AtmController() = default;
 
 void AtmController::transition_to(std::unique_ptr<IAtmState> new_state) {
-    std::unique_lock lock(_mtx);
+    // std::unique_lock lock(_mtx); // assumed locked externally
     _current_state = std::move(new_state);
 }
 
 void AtmController::start_session(std::string_view card, UserRole role) {
-    std::unique_lock lock(_mtx);
+    // std::unique_lock lock(_mtx); // assumed locked externally
 
     // TODO: generate session id?
     std::string session_id("example");
@@ -43,14 +43,19 @@ void AtmController::start_session(std::string_view card, UserRole role) {
     _active_session.emplace(session);
 }
 
+void AtmController::end_session() noexcept {
+    // std::unique_lock lock(_mtx); // assumed locked externally
+    _active_session.reset();
+}
+
 std::expected<void, AtmError> AtmController::process_insert_card(std::string_view card) {
     std::unique_lock lock(_mtx);
-    _current_state->insert_card(*this, card);
-    return {};
+    return _current_state->insert_card(*this, card);
 }
 
 std::expected<void, AtmError> AtmController::validate_active_session() {
-    std::unique_lock lock(_mtx);
+    // std::unique_lock lock(_mtx); // assumed locked externally
+
     if(!_active_session.has_value()) {
         return std::unexpected(AtmError::NoActiveSession);
     }
@@ -63,7 +68,8 @@ std::expected<void, AtmError> AtmController::validate_active_session() {
 }
 
 std::optional<std::string_view> AtmController::get_active_session_id() const {
-    std::unique_lock lock(_mtx);
+    // std::unique_lock lock(_mtx); // assumed locked externally
+
     if (!_active_session.has_value() ) {
         return std::nullopt;
     }
@@ -71,9 +77,4 @@ std::optional<std::string_view> AtmController::get_active_session_id() const {
         return std::nullopt;
     }
     return _active_session->session_id;
-}
-
-void AtmController::end_session() noexcept {
-    std::unique_lock lock(_mtx);
-    _active_session.reset();
 }
