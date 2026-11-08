@@ -53,7 +53,7 @@ public:
 
     std::expected<void, AtmError> validate_active_session(); 
 
-    std::optional<std::string> get_active_session_id() const;
+    std::optional<std::string_view> get_active_session_id() const;
 
     std::string_view get_current_state_name() const { return _current_state->get_state_name(); }
 
@@ -69,5 +69,5 @@ private:
 
     AuthService                      _auth_service;
 
-    mutable std::mutex               _fsm_mtx;
+    mutable std::mutex               _mtx;
 };

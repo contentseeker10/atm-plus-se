@@ -29,10 +29,32 @@ AtmController::AtmController(
 AtmController::~AtmController() = default;
 
 void AtmController::transition_to(std::unique_ptr<IAtmState> new_state) {
+    std::unique_lock lock(_mtx);
     _current_state = std::move(new_state);
 }
 
+std::expected<void, AtmError> AtmController::process_insert_card(std::string_view card) {
+    std::unique_lock lock(_mtx);
+    if (_current_state->get_state_name() != "Idle") {
+        return std::unexpected(AtmError::InvalidStateTransition);
+    }
+    std::unique_ptr<IAtmState> state = std::make_unique<CardInsertedState>();
+    transition_to(std::move(state));
+
+    // TODO: generate session id?
+    std::string_view session_id("example");
+
+    // TODO: somehow select user role Customer/Engineer
+    auto role = UserRole::Customer;
+
+    SessionContext session(session_id, card, UserRole::Customer);
+    _active_session.emplace(session);
+
+    return {};
+}
+
 std::expected<void, AtmError> AtmController::validate_active_session() {
+    std::unique_lock lock(_mtx);
     if(!_active_session.has_value()) {
         return std::unexpected(AtmError::NoActiveSession);
     }
@@ -44,7 +66,8 @@ std::expected<void, AtmError> AtmController::validate_active_session() {
     return {};
 }
 
-std::optional<std::string> AtmController::get_active_session_id() const {
+std::optional<std::string_view> AtmController::get_active_session_id() const {
+    std::unique_lock lock(_mtx);
     if (!_active_session.has_value() ) {
         return std::nullopt;
     }
@@ -54,3 +77,7 @@ std::optional<std::string> AtmController::get_active_session_id() const {
     return _active_session->session_id;
 }
 
+void AtmController::end_session() noexcept {
+    std::unique_lock lock(_mtx);
+    _active_session.emplace(std::nullopt);
+}
