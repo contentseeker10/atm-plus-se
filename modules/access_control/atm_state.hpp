@@ -12,6 +12,11 @@
 
 #pragma once
 
+#include "enums.hpp"
+
+#include <string_view>
+#include <expected>
+
 class AtmController;
 
 class IAtmState {

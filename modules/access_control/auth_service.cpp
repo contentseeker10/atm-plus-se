@@ -11,3 +11,7 @@
  */
 
 #include "auth_service.hpp"
+
+std::expected<UserRole, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
+    return {};
+}

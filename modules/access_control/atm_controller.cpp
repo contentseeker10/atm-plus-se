@@ -14,7 +14,8 @@
 
 #include "cash/cash_vault.hpp"
 
-constexpr std::chrono::seconds TIMEOUT = 60s; 
+constexpr std::chrono::seconds TIMEOUT      = 60s; 
+constexpr size_t               MAX_ATTEMPTS = 3;
 
 AtmController::AtmController(
     std::unique_ptr<CashVault> vault, 
@@ -33,13 +34,13 @@ void AtmController::transition_to(std::unique_ptr<IAtmState> new_state) {
     _current_state = std::move(new_state);
 }
 
-void AtmController::start_session(std::string_view card, UserRole role) {
+void AtmController::start_session(std::string_view card) {
     // std::unique_lock lock(_mtx); // assumed locked externally
 
     // TODO: generate session id?
     std::string session_id("example");
 
-    SessionContext session(session_id, std::string(card), role);
+    SessionContext session(session_id, std::string(card));
     _active_session.emplace(session);
 }
 
@@ -51,6 +52,18 @@ void AtmController::end_session() noexcept {
 std::expected<void, AtmError> AtmController::process_insert_card(std::string_view card) {
     std::unique_lock lock(_mtx);
     return _current_state->insert_card(*this, card);
+}
+
+std::expected<void, AtmError> AtmController::process_enter_pin(std::string_view pin) {
+    std::unique_lock lock(_mtx);
+    for (size_t i{MAX_ATTEMPTS}; i > 0; --i) {
+        auto result = _current_state->enter_pin(*this, pin);
+        if (result.has_value()) {
+            return result;
+        }
+    }
+    // TODO: AuthError must be mapped to AtmError (how?) so user can see exact error
+    return std::unexpected(AtmError::Unauthorized);
 }
 
 std::expected<void, AtmError> AtmController::validate_active_session() {
@@ -65,6 +78,15 @@ std::expected<void, AtmError> AtmController::validate_active_session() {
     }
     _active_session->touch();
     return {};
+}
+
+std::expected<UserRole, AtmError> AtmController::authenticate_current_card(std::string_view pin) {
+    auto auth_result = _auth_service.authenticate_card(_active_session->card_number, pin);
+    if (!auth_result.has_value()) {
+        // TODO: AuthError must be mapped to AtmError (how?) so user can see exact error
+        return std::unexpected(AtmError::Unauthorized);
+    }
+    return auth_result.value();
 }
 
 std::optional<std::string_view> AtmController::get_active_session_id() const {

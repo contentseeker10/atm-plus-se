@@ -45,7 +45,7 @@ public:
     AtmController& operator=(AtmController&&)      = delete;
 
     void transition_to(std::unique_ptr<IAtmState> new_state);
-    void start_session(std::string_view card, UserRole role);
+    void start_session(std::string_view card);
     void end_session() noexcept;
 
     std::expected<void, AtmError> process_insert_card(std::string_view card);
@@ -54,6 +54,7 @@ public:
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
 
     std::expected<void, AtmError> validate_active_session(); 
+    std::expected<UserRole, AtmError> authenticate_current_card(std::string_view card);
 
     std::optional<std::string_view> get_active_session_id() const;
 
