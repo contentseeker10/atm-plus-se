@@ -48,8 +48,28 @@ enum class AtmError {
     InsufficientCashInAtm,
     InvalidAmount,
     CassetteFull,
-    VaultDoorOpen
+    VaultDoorOpen,
+    CardNotFound,
+    CardBlocked,
+    InvalidPin,
+    MaxAttemptsExceeded,
+    CardExpired,
+    CryptoVerificationFailed,
+    DatabaseError
 };
+
+constexpr AtmError to_atm_error(AuthError err) noexcept {
+    switch (err) {
+        case AuthError::CardNotFound:             return AtmError::CardNotFound;
+        case AuthError::CardBlocked:              return AtmError::CardBlocked;
+        case AuthError::InvalidPin:               return AtmError::InvalidPin;
+        case AuthError::MaxAttemptsExceeded:      return AtmError::MaxAttemptsExceeded;
+        case AuthError::CardExpired:              return AtmError::CardExpired;
+        case AuthError::CryptoVerificationFailed: return AtmError::CryptoVerificationFailed;
+        case AuthError::DatabaseError:            return AtmError::DatabaseError;
+        default:                                  return AtmError::Unauthorized;
+    }
+}
 
 enum class AuthError {
     CardNotFound,

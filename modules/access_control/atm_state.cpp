@@ -25,8 +25,10 @@ std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& ctx, s
         return std::unexpected(role.error());
     }
     if (role.value() == UserRole::Customer) {
+        ctx.update_role(UserRole::Customer);
         ctx.transition_to(std::make_unique<CustomerSessionState>());
     } else if (role.value() == UserRole::Engineer) {
+        ctx.update_role(UserRole::Engineer);
         ctx.transition_to(std::make_unique<EngineerSessionState>());
     } else {
         return std::unexpected(AtmError::InternalError);

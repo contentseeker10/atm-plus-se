@@ -47,6 +47,7 @@ public:
     void transition_to(std::unique_ptr<IAtmState> new_state);
     void start_session(std::string_view card);
     void end_session() noexcept;
+    void update_role(UserRole new_role);
 
     std::expected<void, AtmError> process_insert_card(std::string_view card);
     std::expected<void, AtmError> process_enter_pin(std::string_view pin);
@@ -71,5 +72,5 @@ private:
 
     AuthService                      _auth_service;
 
-    mutable std::mutex               _mtx;
+    mutable std::recursive_mutex     _mtx;
 };
