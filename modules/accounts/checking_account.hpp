@@ -28,6 +28,8 @@ public:
 
     std::int64_t calculate_overflow_excess() const noexcept;
 
+    std::int64_t get_client_min_cents() const noexcept { return _client_min_cents; }
+
     bool validate_invariants() const noexcept override;
 
 private:
