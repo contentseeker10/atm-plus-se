@@ -129,3 +129,67 @@ std::expected<void, LedgerError> LedgerService::transfer(Account& from, Account&
     }
     return {};
 }
+
+std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
+    CheckingAccount& checking, SavingsAccount& savings, std::int64_t amount_cents,
+    std::uint64_t nonce)
+{
+    if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
+    if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
+    if (amount_cents > checking.get_balance())
+    {
+        return std::unexpected(LedgerError::InsufficientFunds);
+    }
+
+    if (auto r = claim_nonce(nonce, ""); !r) return r;
+
+    const bool needs_coverage = checking.needs_overdraft_coverage(amount_cents);
+    const std::int64_t needed =
+        needs_coverage
+            ? checking.get_client_min_cents() - (checking.get_balance() - amount_cents)
+            : 0;
+
+    if (needs_coverage)
+    {
+        if (auto w = savings.withdraw(needed); !w)
+        {
+            return std::unexpected(LedgerError::NoOverdraftCoverage);
+        }
+        if (auto d = checking.deposit(needed); !d)
+        {
+            savings.deposit(needed);
+            return std::unexpected(map_account_error(d.error()));
+        }
+    }
+
+    if (auto w = checking.withdraw(amount_cents); !w)
+    {
+        if (needs_coverage)
+        {
+            checking.withdraw(needed);
+            savings.deposit(needed);
+        }
+        return std::unexpected(map_account_error(w.error()));
+    }
+
+    std::vector<LedgerEntry> entries;
+    if (needs_coverage)
+    {
+        entries.push_back(make_entry(savings.get_account_id(), checking.get_account_id(),
+                                     needed, "OVERDRAFT_COVERAGE", nonce));
+    }
+    entries.push_back(make_entry(checking.get_account_id(), ATM_VAULT_ACCOUNT_ID,
+                                 amount_cents, "WITHDRAWAL", nonce));
+
+    if (auto r = append_entries(std::move(entries)); !r)
+    {
+        checking.deposit(amount_cents);
+        if (needs_coverage)
+        {
+            checking.withdraw(needed);
+            savings.deposit(needed);
+        }
+        return r;
+    }
+    return {};
+}
