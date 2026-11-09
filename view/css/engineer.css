@@ -1,0 +1,211 @@
+.eng-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.eng-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.eng-badge.door-closed {
+  background: var(--status-ok-bg);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #6ee7b7;
+}
+
+.eng-badge.door-open {
+  background: var(--status-warn-bg);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  color: #fcd34d;
+}
+
+.vault-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.vault-stat-box {
+  background: rgba(15, 21, 31, 0.86);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vault-stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.vault-stat-value {
+  font-family: var(--font-mono);
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #fde68a;
+}
+
+/* Cassettes Grid */
+.cassettes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.cassette-card {
+  background: rgba(17, 24, 36, 0.9);
+  border: 1px solid #2e3a4e;
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cassette-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+}
+
+.cassette-denom {
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.cassette-pct {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.cassette-meter {
+  height: 6px;
+  background: #090d14;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #242f40;
+}
+
+.cassette-meter-fill {
+  height: 100%;
+  background: var(--status-ok);
+  transition: width 260ms ease;
+}
+
+.cassette-meter-fill.level-warn {
+  background: var(--status-warn);
+}
+
+.cassette-meter-fill.level-low {
+  background: var(--status-danger);
+}
+
+.cassette-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+
+.replenish-inline-btn {
+  padding: 2px 6px;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 3px;
+  color: #fde68a;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.replenish-inline-btn:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.28);
+}
+
+/* Audit Log Table & Hash Chain Verification */
+.audit-table-wrap {
+  max-height: 195px;
+  overflow-y: auto;
+  border: 1px solid #283447;
+  border-radius: var(--radius-xs);
+  background: #070b12;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.67rem;
+  text-align: left;
+}
+
+.audit-table th,
+.audit-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #192231;
+  white-space: nowrap;
+}
+
+.audit-table th {
+  position: sticky;
+  top: 0;
+  background: #111826;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.audit-table tr.tampered-row {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fecaca;
+}
+
+.integrity-banner {
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.integrity-banner.chain-valid {
+  background: var(--status-ok-bg);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #6ee7b7;
+}
+
+.integrity-banner.chain-compromised {
+  background: var(--status-danger-bg);
+  border: 1px solid rgba(239, 68, 68, 0.65);
+  color: #fca5a5;
+}
+
+@media (max-width: 680px) {
+  .cassettes-grid,
+  .vault-summary-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+}
