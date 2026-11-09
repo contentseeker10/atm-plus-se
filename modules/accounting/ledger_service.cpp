@@ -244,3 +244,83 @@ std::expected<void, LedgerError> LedgerService::deposit_with_overflow(
     }
     return {};
 }
+
+std::expected<void, LedgerError> LedgerService::register_aps_rule(ApsRule rule)
+{
+    if (rule.rule_id.empty() || rule.payer_account_id.empty() ||
+        rule.payee_account_id.empty())
+    {
+        return std::unexpected(LedgerError::InvalidRule);
+    }
+    if (rule.payer_account_id == rule.payee_account_id || rule.amount_cents <= 0 ||
+        rule.period < std::chrono::seconds{0})
+    {
+        return std::unexpected(LedgerError::InvalidRule);
+    }
+
+    std::unique_lock lock(_aps_mtx);
+    _aps_rules.push_back(std::move(rule));
+    return {};
+}
+
+ApsRunResult LedgerService::run_aps(
+    std::chrono::system_clock::time_point now,
+    const std::function<Account*(const std::string&)>& resolve_account)
+{
+    ApsRunResult result;
+
+    if (_integrity_compromised)
+    {
+        result.failures.push_back("ledger integrity compromised; APS blocked");
+        return result;
+    }
+
+    std::unique_lock lock(_aps_mtx);
+
+    for (auto& rule : _aps_rules)
+    {
+        if (rule.period.count() > 0 && (now - rule.last_run) < rule.period) { continue; }
+
+        Account* payer =
+            resolve_account ? resolve_account(rule.payer_account_id) : nullptr;
+        Account* payee =
+            resolve_account ? resolve_account(rule.payee_account_id) : nullptr;
+        if (!payer || !payee)
+        {
+            result.failures.push_back(
+                std::format("rule {}: account not found", rule.rule_id));
+            continue;
+        }
+
+        std::int64_t amount = rule.amount_cents;
+        if (!rule.fixed_amount)
+        {
+            amount = std::min(rule.amount_cents, payer->get_balance());
+        }
+        if (amount <= 0)
+        {
+            result.failures.push_back(
+                std::format("rule {}: payer has no funds", rule.rule_id));
+            continue;
+        }
+
+        const std::string idemp_key =
+            std::format("aps:{}:{}", rule.rule_id, rule.run_count + 1);
+        const std::uint64_t nonce = ++_aps_nonce_counter;
+
+        auto r = transfer(*payer, *payee, amount,
+                          rule.fixed_amount ? "APS_FAS" : "APS_VAS", nonce, idemp_key);
+        if (!r)
+        {
+            result.failures.push_back(
+                std::format("rule {}: {}", rule.rule_id, static_cast<int>(r.error())));
+            continue;
+        }
+
+        rule.last_run = now;
+        ++rule.run_count;
+        ++result.executed;
+    }
+
+    return result;
+}
