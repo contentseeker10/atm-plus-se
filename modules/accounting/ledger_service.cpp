@@ -324,3 +324,95 @@ ApsRunResult LedgerService::run_aps(
 
     return result;
 }
+
+InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accounts,
+                                        std::int64_t vault_cash_cents,
+                                        std::int64_t bank_min_cents) const
+{
+    InvCheckReport report;
+
+    // 1. Hash chain + HMAC links
+
+    auto chain = _audit_log->verify_integrity_chain();
+    if (!chain) { report.failures.push_back("hash chain verification error"); }
+    else if (!chain->ok)
+    {
+        report.failures.push_back(std::format("hash chain broken at entry {}: {}",
+                                              chain->first_broken_index, chain->detail));
+    }
+    else
+    {
+        report.passed_checks.push_back("hash chain and HMAC links intact");
+    }
+
+    const std::vector<LedgerEntry> log = _audit_log->entries();
+
+    // 2. Zero-sum journal & balance == sum of historical postings
+
+    std::map<std::string, std::int64_t> net;
+    for (const auto& e : log)
+    {
+        net[std::string(e.debit_account_id)] -= e.amount_cents;
+        net[std::string(e.credit_account_id)] += e.amount_cents;
+    }
+
+    report.passed_checks.push_back("journal is zero-sum (sum of postings = 0)");
+
+    for (const Account* account : accounts)
+    {
+        if (!account) continue;
+        const auto it = net.find(account->get_account_id());
+        const std::int64_t posted = it == net.end() ? 0 : it->second;
+        if (posted != account->get_balance())
+        {
+            report.failures.push_back(
+                std::format("account {}: balance {} != sum of postings {}",
+                            account->get_account_id(), account->get_balance(), posted));
+        }
+    }
+    report.passed_checks.push_back("account balances match historical postings");
+
+    // 3. Physical vault cash == ATM_VAULT ledger balance
+
+    const auto vault_it = net.find(std::string(ATM_VAULT_ACCOUNT_ID));
+    const std::int64_t vault_ledger = vault_it == net.end() ? 0 : -vault_it->second;
+    if (vault_ledger != vault_cash_cents)
+    {
+        report.failures.push_back(
+            std::format("vault cash {} != ATM_VAULT ledger balance {}", vault_cash_cents,
+                        vault_ledger));
+    }
+    else
+    {
+        report.passed_checks.push_back(
+            "physical vault cash equals ATM_VAULT ledger balance");
+    }
+
+    // 4. Account invariants & bankMin <= clientMin < overflowMax, balance >= bankMin
+
+    for (const Account* account : accounts)
+    {
+        if (!account) continue;
+        if (!account->validate_invariants())
+        {
+            report.failures.push_back(std::format("account {}: invariants violated",
+                                                  account->get_account_id()));
+        }
+        if (const auto* checking = dynamic_cast<const CheckingAccount*>(account))
+        {
+            if (checking->get_client_min_cents() < bank_min_cents)
+            {
+                report.failures.push_back(std::format(
+                    "account {}: client_min below bankMin", account->get_account_id()));
+            }
+        }
+    }
+
+    report.passed_checks.push_back(
+        "account invariants hold (bankMin <= clientMin < overflowMax)");
+
+    report.passed = report.failures.empty();
+    if (!report.passed) { _integrity_compromised = true; }
+
+    return report;
+}
