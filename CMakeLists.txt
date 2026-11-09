@@ -39,6 +39,8 @@ add_executable(AtmPlusSe
     modules/storage/row_mapping.cpp
     modules/storage/sqlite_utils.cpp
     modules/storage/transaction.cpp
+
+    modules/accounting/ledger_service.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 
@@ -57,3 +59,46 @@ if (MSVC)
 else()
     add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic)
 endif()
+
+add_executable(atm_tests
+    tests/test_main.cpp
+    tests/test_spec_tcs.cpp
+    tests/test_aps.cpp
+    tests/test_ledger_persistence.cpp
+
+    modules/accounting/ledger.cpp
+    modules/accounting/audit.cpp
+    modules/accounting/ledger_service.cpp
+
+    modules/accounts/account.cpp
+    modules/accounts/checking_account.cpp
+    modules/accounts/savings_account.cpp
+
+    modules/security/anti_replay.cpp
+
+    modules/storage/operations.cpp
+    modules/storage/row_mapping.cpp
+    modules/storage/sqlite_utils.cpp
+    modules/storage/transaction.cpp
+
+    core/crypto.cpp
+    core/db.cpp
+)
+
+target_include_directories(atm_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/modules
+)
+
+target_link_libraries(atm_tests PRIVATE SQLite::SQLite3)
+target_link_libraries(atm_tests PRIVATE openssl::openssl)
+
+if (MSVC)
+    target_compile_options(atm_tests PRIVATE /utf-8)
+else()
+    target_compile_options(atm_tests PRIVATE -Wall -Wextra -Wshadow -pedantic)
+endif()
+
+enable_testing()
+add_test(NAME accounting COMMAND atm_tests)
