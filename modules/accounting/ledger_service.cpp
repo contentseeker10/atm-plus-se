@@ -193,3 +193,54 @@ std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
     }
     return {};
 }
+
+std::expected<void, LedgerError> LedgerService::deposit_with_overflow(
+    CheckingAccount& checking, SavingsAccount& savings, std::int64_t amount_cents,
+    std::uint64_t nonce)
+{
+    if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
+    if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
+
+    if (auto r = claim_nonce(nonce, ""); !r) return r;
+
+    if (auto d = checking.deposit(amount_cents); !d)
+    {
+        return std::unexpected(map_account_error(d.error()));
+    }
+
+    const std::int64_t excess = checking.calculate_overflow_excess();
+
+    if (excess > 0)
+    {
+        if (auto w = checking.withdraw(excess); !w)
+        {
+            return std::unexpected(map_account_error(w.error()));
+        }
+        if (auto d2 = savings.deposit(excess); !d2)
+        {
+            checking.deposit(excess);
+            return std::unexpected(map_account_error(d2.error()));
+        }
+    }
+
+    std::vector<LedgerEntry> entries;
+    entries.push_back(make_entry(ATM_VAULT_ACCOUNT_ID, checking.get_account_id(),
+                                 amount_cents, "DEPOSIT", nonce));
+    if (excess > 0)
+    {
+        entries.push_back(make_entry(checking.get_account_id(), savings.get_account_id(),
+                                     excess, "OVERFLOW_SWEEP", nonce));
+    }
+
+    if (auto r = append_entries(std::move(entries)); !r)
+    {
+        if (excess > 0)
+        {
+            savings.withdraw(excess);
+            checking.deposit(excess);
+        }
+        checking.withdraw(amount_cents);
+        return r;
+    }
+    return {};
+}
