@@ -1,0 +1,104 @@
+Language: Cpp
+BasedOnStyle: LLVM
+
+# ---------------------------------------------------------------------------
+# Indentation
+# ---------------------------------------------------------------------------
+
+ColumnLimit: 90
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+BraceWrapping:
+  IndentBraces: false
+
+IndentCaseBlocks: false
+IndentCaseLabels: false
+
+# int f() {
+#   if (foo()) {
+#   label1:
+#     bar();
+#   }
+# label2:
+#   return 1;
+# }
+IndentGotoLabels: OuterIndent
+
+IndentAccessModifiers: false
+AccessModifierOffset: -4
+
+BreakAfterOpenBracketFunction: false
+PackArguments:
+  BinPack: BinPack
+PackParameters:
+  BinPack: BinPack
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+
+NamespaceIndentation: All
+
+# Sort each #include block separately.
+IncludeBlocks: Preserve
+
+# #ifdef
+#   #if
+#     #etc
+IndentPPDirectives: BeforeHash
+
+# Attach always, except for func, enum and record definitions.
+BreakBeforeBraces: Allman
+BreakAfterReturnType: None
+
+PenaltyReturnTypeOnItsOwnLine: 1000
+
+# ---------------------------------------------------------------------------
+# Spaces
+# ---------------------------------------------------------------------------
+
+# Space: After Cast Close Parenthesis = true
+SpaceAfterCStyleCast: true
+
+# Put a space before opening parentheses only after control statement keywords (for/if/while...).
+SpaceBeforeParens: ControlStatements
+
+SpaceBeforeAssignmentOperators: true
+
+SpaceBeforeCtorInitializerColon: true
+
+SpaceBeforeSquareBrackets: false
+
+SpaceBeforeInheritanceColon: true
+
+SpaceBeforeCpp11BracedList: false
+
+# class Unit { };
+# auto a = [] { };
+# int x{};
+SpaceInEmptyBraces: Block
+
+SpacesInSquareBrackets: false
+
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+# vector<int> x{1, 2, 3, 4};
+# vector<T> x{{}, {}, {}, {}};
+# Type name{// Comment
+#           value};
+Cpp11BracedListStyle: AlignFirstComment
+
+# Space: Within Control Flow Statement Parentheses = false
+SpacesInParens: Never
+
+# ---------------------------------------------------------------------------
+# Wrapping
+# ---------------------------------------------------------------------------
+
+# Keep short brace blocks on one line when they fit.
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLoopsOnASingleLine: true
