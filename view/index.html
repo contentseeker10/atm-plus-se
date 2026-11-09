@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATM+ SE | Security-Engineered Banking Terminal</title>
+  <link rel="stylesheet" href="./css/variables.css">
+  <link rel="stylesheet" href="./css/layout.css">
+  <link rel="stylesheet" href="./css/atm-screen.css">
+  <link rel="stylesheet" href="./css/components.css">
+  <link rel="stylesheet" href="./css/engineer.css">
+</head>
+<body>
+  <div class="workspace-shell">
+    <!-- Left / Center: Physical ATM Kiosk Hardware -->
+    <main class="atm-chassis" aria-label="ATM Hardware Terminal">
+      <!-- Top Security Fascia -->
+      <header class="atm-fascia">
+        <div class="fascia-brand">
+          <div class="brand-emblem" aria-hidden="true">
+            <svg viewBox="0 0 28 28" width="22" height="22" fill="none">
+              <rect x="2" y="2" width="24" height="24" rx="4" stroke="currentColor" stroke-width="2"/>
+              <path d="M7 14H21M14 7V21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="brand-titles">
+            <span class="brand-name">ATM+ SE</span>
+            <span class="brand-sub">EVEN POINTERS ARE SMART // NATIONAL BANK</span>
+          </div>
+        </div>
+
+        <div class="fascia-telemetry">
+          <div class="telemetry-pill" title="Finite State Machine Status">
+            <span class="telemetry-label">FSM</span>
+            <span id="fsm-state-badge" class="telemetry-value state-idle">Idle</span>
+          </div>
+          <div class="telemetry-pill" title="Authenticated Session Role">
+            <span class="telemetry-label">ROLE</span>
+            <span id="session-role-badge" class="telemetry-value">None</span>
+          </div>
+          <div id="timeout-pill" class="telemetry-pill hidden" title="Inactivity Session Timer">
+            <span class="telemetry-label">TIMEOUT</span>
+            <span id="timeout-counter" class="telemetry-value">45s</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Upper Console: Bezel Keys + Recessed CRT/TFT Display -->
+      <section class="atm-console" aria-label="ATM Display Console">
+        <div class="bezel-column bezel-left" role="group" aria-label="Left Screen Function Keys">
+          <button type="button" class="bezel-key" data-fkey="F1" aria-label="Function Key F1">
+            <span class="bezel-key-cap">F1</span>
+            <span class="bezel-leader"></span>
+          </button>
+          <button type="button" class="bezel-key" data-fkey="F2" aria-label="Function Key F2">
+            <span class="bezel-key-cap">F2</span>
+            <span class="bezel-leader"></span>
+          </button>
+          <button type="button" class="bezel-key" data-fkey="F3" aria-label="Function Key F3">
+            <span class="bezel-key-cap">F3</span>
+            <span class="bezel-leader"></span>
+          </button>
+          <button type="button" class="bezel-key" data-fkey="F4" aria-label="Function Key F4">
+            <span class="bezel-key-cap">F4</span>
+            <span class="bezel-leader"></span>
+          </button>
+        </div>
+
+        <div class="screen-bezel">
+          <div id="atm-screen" class="atm-screen mode-customer" role="region" aria-live="polite">
+            <div class="screen-scanlines" aria-hidden="true"></div>
+
+            <!-- Screen Top Bar -->
+            <div class="screen-statusbar">
+              <div class="screen-status-left">
+                <span class="status-dot"></span>
+                <span id="screen-terminal-id">TERMINAL #UA-KBP-042</span>
+              </div>
+              <div class="screen-status-center" id="screen-card-banner">NO CARD INSERTED</div>
+              <div class="screen-status-right" id="screen-clock">HSM: ONLINE</div>
+            </div>
+
+            <!-- Alert Notification Banner -->
+            <div id="screen-alert" class="screen-alert hidden" role="alert"></div>
+
+            <!-- Main Interactive Screen Body -->
+            <div class="screen-stage">
+              <div id="screen-side-left" class="screen-side-column side-left"></div>
+              <div id="screen-viewport" class="screen-viewport"></div>
+              <div id="screen-side-right" class="screen-side-column side-right"></div>
+            </div>
+
+            <!-- Screen Footer Hint -->
+            <div class="screen-footer">
+              <span id="screen-footer-hint">ZERO-TRUST TERMINAL // ALL OPERATIONS VERIFIED BY BACKEND</span>
+              <span id="screen-session-timer" class="screen-timer-label"></span>
+            </div>
+
+            <!-- Loading Spinner Overlay -->
+            <div id="screen-loading" class="screen-loading hidden" aria-hidden="true">
+              <div class="spinner-ring"></div>
+              <div id="screen-loading-text" class="spinner-text">PROCESSING COMMAND...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bezel-column bezel-right" role="group" aria-label="Right Screen Function Keys">
+          <button type="button" class="bezel-key" data-fkey="F5" aria-label="Function Key F5">
+            <span class="bezel-leader"></span>
+            <span class="bezel-key-cap">F5</span>
+          </button>
+          <button type="button" class="bezel-key" data-fkey="F6" aria-label="Function Key F6">
+            <span class="bezel-leader"></span>
+            <span class="bezel-key-cap">F6</span>
+          </button>
+          <button type="button" class="bezel-key" data-fkey="F7" aria-label="Function Key F7">
+            <span class="bezel-leader"></span>
+            <span class="bezel-key-cap">F7</span>
+          </button>
+          <button type="button" class="bezel-key" data-fkey="F8" aria-label="Function Key F8">
+            <span class="bezel-leader"></span>
+            <span class="bezel-key-cap">F8</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Lower Hardware Deck: PIN Pad + Card Reader + Receipt Printer + Cash Shutter -->
+      <section class="atm-hardware-deck" aria-label="ATM Physical Peripherals">
+        <!-- Left Column: Encrypted PIN Pad -->
+        <div class="hardware-module pinpad-module">
+          <div class="module-header">
+            <span class="module-title">ENCRYPTED PIN PAD (EPP)</span>
+            <span class="module-tag">PCI-PTS</span>
+          </div>
+          <div id="pin-pad-root" class="pinpad-container"></div>
+        </div>
+
+        <!-- Right Column: Card Reader, Receipt Slot, Cash Acceptor/Dispenser -->
+        <div class="hardware-peripherals">
+          <div class="peripherals-top-row">
+            <!-- Card Reader Slot -->
+            <div class="hardware-module card-reader-module">
+              <div class="module-header">
+                <span class="module-title">SMART CARD READER</span>
+                <span id="card-led-label" class="led-status-text">READY</span>
+              </div>
+              <div id="card-slot-root"></div>
+            </div>
+
+            <!-- Thermal Receipt Printer -->
+            <div class="hardware-module receipt-printer-module">
+              <div class="module-header">
+                <span class="module-title">RECEIPT PRINTER</span>
+                <span class="module-tag">THERMAL 80MM</span>
+              </div>
+              <div id="receipt-slot-root"></div>
+            </div>
+          </div>
+
+          <!-- Cash Dispenser / Bill Acceptor -->
+          <div class="hardware-module cash-shutter-module">
+            <div class="module-header">
+              <span class="module-title">CASH DISPENSER &amp; BILL ACCEPTOR</span>
+              <span id="shutter-state-label" class="module-tag">SHUTTER CLOSED</span>
+            </div>
+            <div id="bill-acceptor-root"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Right Dock: Interactive Test Cards & Simulation Controls -->
+    <aside class="test-bench-dock" aria-label="Interactive Test Cards">
+      <div class="dock-header">
+        <h1 class="dock-title">TEST CARD WALLET</h1>
+        <p class="dock-subtitle">Click a card to insert into the motorized reader slot</p>
+      </div>
+      <div id="test-cards-root" class="test-cards-list"></div>
+    </aside>
+  </div>
+
+  <!-- Compact Environment Status Bar -->
+  <footer id="env-status-bar" class="env-status-bar" aria-label="Backend Environment Controls">
+    <div class="env-mode-group">
+      <span class="env-group-label">ADAPTER MODE:</span>
+      <label class="env-toggle-option">
+        <input type="radio" name="adapter-mode" id="mode-mock-radio" value="mock" checked>
+        <span class="env-check-box" id="mode-mock-indicator">[x] Mock Mode</span>
+      </label>
+      <span class="env-divider">|</span>
+      <label class="env-toggle-option">
+        <input type="radio" name="adapter-mode" id="mode-live-radio" value="live">
+        <span class="env-check-box" id="mode-live-indicator">[ ] Live Backend</span>
+      </label>
+    </div>
+
+    <div class="env-url-group">
+      <label for="api-base-url-input" class="env-group-label">API URL:</label>
+      <input
+        type="url"
+        id="api-base-url-input"
+        class="env-url-input"
+        placeholder="http://localhost:8080/api"
+        spellcheck="false"
+      >
+      <button type="button" id="apply-api-url-btn" class="env-action-btn">Apply</button>
+      <button type="button" id="reset-mock-btn" class="env-action-btn env-btn-secondary" title="Reset in-memory mock accounts, cassettes, and audit log">
+        Reset Mock State
+      </button>
+    </div>
+  </footer>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

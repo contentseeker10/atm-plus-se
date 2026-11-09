@@ -3,6 +3,7 @@
 
 ### Other ###
 *.pdf
+temp/
 
 ### C++ ###
 # Prerequisites
