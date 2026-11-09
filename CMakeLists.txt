@@ -32,6 +32,7 @@ add_executable(AtmPlusSe
     
     modules/accounting/ledger.cpp
     modules/accounting/audit.cpp
+    modules/accounting/ledger_service.cpp
     
     modules/security/anti_replay.cpp
 
