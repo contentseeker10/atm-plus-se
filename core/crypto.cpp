@@ -17,6 +17,7 @@
 
 #include <format>
 #include <array>
+#include <stdexcept>
 
 namespace crypto
 {
