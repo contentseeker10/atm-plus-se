@@ -26,8 +26,7 @@ class AuthService
 public:
     AuthService(std::shared_ptr<DatabaseManager> db, std::shared_ptr<AuditLog> log)
         : _db{std::move(db)}, _audit_log{std::move(log)}
-    {
-    }
+    { }
 
     std::expected<UserRole, AuthError> authenticate_card(std::string_view card,
                                                          std::string_view pin);

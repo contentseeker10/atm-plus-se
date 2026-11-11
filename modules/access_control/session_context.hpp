@@ -24,8 +24,7 @@ class SessionContext
 public:
     SessionContext(std::string id, std::string card_num)
         : session_id{std::move(id)}, card_number{std::move(card_num)}
-    {
-    }
+    { }
 
     std::string session_id;
     std::string card_number;

@@ -29,8 +29,7 @@ namespace storage
 
     Transaction::Transaction(Transaction&& other) noexcept
         : _db{std::exchange(other._db, nullptr)}
-    {
-    }
+    { }
 
     Transaction::~Transaction()
     {

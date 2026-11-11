@@ -25,6 +25,5 @@ struct Sut
     Sut()
         : audit{std::make_shared<AuditLog>(nullptr, "test-hmac-secret")},
           replay{std::make_shared<AntiReplayManager>()}, ledger{audit, replay}
-    {
-    }
+    { }
 };

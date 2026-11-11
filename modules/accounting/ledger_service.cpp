@@ -38,8 +38,7 @@ namespace
 LedgerService::LedgerService(std::shared_ptr<AuditLog> audit_log,
                              std::shared_ptr<AntiReplayManager> anti_replay)
     : _audit_log{std::move(audit_log)}, _anti_replay{std::move(anti_replay)}
-{
-}
+{ }
 
 bool LedgerService::integrity_ok() const noexcept { return !_integrity_compromised; }
 

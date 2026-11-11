@@ -23,8 +23,7 @@ class HttpServerAdapter
 public:
     HttpServerAdapter(std::shared_ptr<AtmController> controller, int port = 8080)
         : _atm_controller{controller}, _port{port}
-    {
-    }
+    { }
 
     void start()
     {
