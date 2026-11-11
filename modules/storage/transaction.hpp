@@ -18,8 +18,10 @@
 
 struct sqlite3;
 
-namespace storage {
-    class Transaction {
+namespace storage
+{
+    class Transaction
+    {
     public:
         static std::expected<Transaction, DbError> begin(sqlite3* db) noexcept;
 
@@ -38,4 +40,4 @@ namespace storage {
 
         sqlite3* _db;
     };
-}
+} // namespace storage

@@ -12,7 +12,8 @@
 
 #pragma once
 
-enum class ServiceType {
+enum class ServiceType
+{
     Withdrawal,
     Deposit,
     Transfer,
@@ -20,13 +21,15 @@ enum class ServiceType {
     EngineerMaintenance
 };
 
-enum class UserRole {
+enum class UserRole
+{
     Customer,
     Engineer,
     None
 };
 
-enum class Denomination {
+enum class Denomination
+{
     D_10 = 1000,
     D_20 = 2000,
     D_50 = 5000,
@@ -35,7 +38,8 @@ enum class Denomination {
     D_500 = 50000
 };
 
-enum class AtmError {
+enum class AtmError
+{
     InvalidStateTransition,
     NoActiveSession,
     SessionExpired,
@@ -58,7 +62,8 @@ enum class AtmError {
     DatabaseError
 };
 
-enum class AuthError {
+enum class AuthError
+{
     CardNotFound,
     CardBlocked,
     InvalidPin,
@@ -68,20 +73,23 @@ enum class AuthError {
     DatabaseError
 };
 
-constexpr AtmError to_atm_error(AuthError err) noexcept {
-    switch (err) {
-        case AuthError::CardNotFound:             return AtmError::CardNotFound;
-        case AuthError::CardBlocked:              return AtmError::CardBlocked;
-        case AuthError::InvalidPin:               return AtmError::InvalidPin;
-        case AuthError::MaxAttemptsExceeded:      return AtmError::MaxAttemptsExceeded;
-        case AuthError::CardExpired:              return AtmError::CardExpired;
-        case AuthError::CryptoVerificationFailed: return AtmError::CryptoVerificationFailed;
-        case AuthError::DatabaseError:            return AtmError::DatabaseError;
-        default:                                  return AtmError::Unauthorized;
+constexpr AtmError to_atm_error(AuthError err) noexcept
+{
+    switch (err)
+    {
+    case AuthError::CardNotFound: return AtmError::CardNotFound;
+    case AuthError::CardBlocked: return AtmError::CardBlocked;
+    case AuthError::InvalidPin: return AtmError::InvalidPin;
+    case AuthError::MaxAttemptsExceeded: return AtmError::MaxAttemptsExceeded;
+    case AuthError::CardExpired: return AtmError::CardExpired;
+    case AuthError::CryptoVerificationFailed: return AtmError::CryptoVerificationFailed;
+    case AuthError::DatabaseError: return AtmError::DatabaseError;
+    default: return AtmError::Unauthorized;
     }
 }
 
-enum class DbError {
+enum class DbError
+{
     ConnectionFailed,
     QueryFailed,
     RecordNotFound,
@@ -90,7 +98,8 @@ enum class DbError {
     Busy
 };
 
-enum class CryptoError {
+enum class CryptoError
+{
     HashMismatch,
     HmacVerificationFailed,
     DatabaseError,

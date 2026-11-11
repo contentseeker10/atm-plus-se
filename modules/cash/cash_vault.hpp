@@ -20,19 +20,22 @@
 #include <map>
 #include <vector>
 
-class CashVault {
+class CashVault
+{
 public:
     explicit CashVault(std::map<Denomination, Cassette> cassettes);
 
-    std::expected<std::map<Denomination, int>, VaultError> calculate_dispense(std::int64_t amount_cents) const;
+    std::expected<std::map<Denomination, int>, VaultError> calculate_dispense(
+        std::int64_t amount_cents) const;
 
-    std::expected<void, VaultError> execute_dispense(const std::map<Denomination, int> &bills);
+    std::expected<void, VaultError> execute_dispense(
+        const std::map<Denomination, int>& bills);
 
-    std::expected<void, VaultError> deposit_bills(const std::vector<Denomination> &bills);
+    std::expected<void, VaultError> deposit_bills(const std::vector<Denomination>& bills);
 
     std::int64_t get_total_cash_cents() const noexcept;
 
-    const std::map<Denomination, Cassette> &get_cassettes() const noexcept;
+    const std::map<Denomination, Cassette>& get_cassettes() const noexcept;
 
     void open_door() noexcept;
 

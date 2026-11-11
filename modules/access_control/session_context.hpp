@@ -14,14 +14,18 @@
 
 #include "enums.hpp"
 
-#include <string>
 #include <chrono>
+#include <string>
 
-class SessionContext {
+class SessionContext
+{
     using clock = std::chrono::steady_clock;
+
 public:
     SessionContext(std::string id, std::string card_num)
-    : session_id{std::move(id)}, card_number{std::move(card_num)} {}
+        : session_id{std::move(id)}, card_number{std::move(card_num)}
+    {
+    }
 
     std::string session_id;
     std::string card_number;
@@ -31,11 +35,13 @@ public:
     clock::time_point last_activity{clock::now()};
 
     uint64_t current_nonce{};
+
 public:
     void touch() noexcept { last_activity = clock::now(); }
-    
-    bool is_expired(std::chrono::seconds timeout) const noexcept { return (clock::now() - last_activity) >= timeout; };
-    bool is_authenticated()                       const noexcept { return role != UserRole::None; }
+
+    bool is_expired(std::chrono::seconds timeout) const noexcept
+    { return (clock::now() - last_activity) >= timeout; };
+    bool is_authenticated() const noexcept { return role != UserRole::None; }
 
     uint64_t next_nonce() noexcept { return ++current_nonce; };
 };

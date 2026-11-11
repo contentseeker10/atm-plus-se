@@ -18,21 +18,26 @@
 
 inline constexpr auto HOST = "0.0.0.0";
 
-class HttpServerAdapter {
+class HttpServerAdapter
+{
 public:
-    HttpServerAdapter(std::shared_ptr<AtmController> controller, int port = 8080) 
-    : _atm_controller{controller}, _port{port} {}
+    HttpServerAdapter(std::shared_ptr<AtmController> controller, int port = 8080)
+        : _atm_controller{controller}, _port{port}
+    {
+    }
 
-    void start() {
-        register_routes(); 
-        _server.listen(HOST, _port); 
+    void start()
+    {
+        register_routes();
+        _server.listen(HOST, _port);
     }
     void stop() noexcept { _server.stop(); };
 
     void register_routes();
+
 private:
     httplib::Server _server;
-    int         _port{8080};
+    int _port{8080};
 
     std::shared_ptr<AtmController> _atm_controller;
 };
