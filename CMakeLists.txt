@@ -11,6 +11,12 @@ find_package(nlohmann_json REQUIRED)
 find_package(SQLite3 REQUIRED)
 find_package(OpenSSL REQUIRED)
 
+if (MSVC)
+    add_compile_options(/Wall /utf-8)
+else()
+    add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic)
+endif()
+
 add_executable(AtmPlusSe 
     main/main.cpp
 
@@ -54,12 +60,6 @@ target_link_libraries(AtmPlusSe PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(AtmPlusSe PRIVATE SQLite::SQLite3)
 target_link_libraries(AtmPlusSe PRIVATE openssl::openssl)
 
-if (MSVC)
-    add_compile_options(/Wall /utf-8)
-else()
-    add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic)
-endif()
-
 add_executable(atm_tests
     tests/test_main.cpp
     tests/test_spec_tcs.cpp
@@ -93,12 +93,6 @@ target_include_directories(atm_tests PRIVATE
 
 target_link_libraries(atm_tests PRIVATE SQLite::SQLite3)
 target_link_libraries(atm_tests PRIVATE openssl::openssl)
-
-if (MSVC)
-    target_compile_options(atm_tests PRIVATE /utf-8)
-else()
-    target_compile_options(atm_tests PRIVATE -Wall -Wextra -Wshadow -pedantic)
-endif()
 
 enable_testing()
 add_test(NAME accounting COMMAND atm_tests)
