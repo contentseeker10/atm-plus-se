@@ -1,0 +1,424 @@
+.workspace-shell {
+  max-width: 1460px;
+  margin: 0 auto;
+  padding: 18px 20px 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* Main Physical ATM Chassis */
+.atm-chassis {
+  background: linear-gradient(165deg, #272f3d 0%, #191e28 52%, #131720 100%);
+  border: 2px solid var(--chassis-border);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    var(--chassis-shadow),
+    inset 0 1px 0 var(--chassis-highlight);
+  padding: 16px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Top Security Fascia */
+.atm-fascia {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(90deg, #11151d 0%, #1b2230 60%, #121721 100%);
+  border: 1px solid #2e3748;
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.fascia-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-emblem {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: var(--text-accent);
+  display: grid;
+  place-items: center;
+}
+
+.brand-titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-name {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  color: #f8fafc;
+}
+
+.brand-sub {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.11em;
+  color: var(--text-secondary);
+}
+
+.fascia-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.telemetry-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  background: #0d1118;
+  border: 1px solid #2b3545;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.telemetry-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.telemetry-value {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.telemetry-value.state-idle {
+  color: var(--status-ok);
+}
+
+.telemetry-value.state-active {
+  color: var(--status-info);
+}
+
+.telemetry-value.state-engineer {
+  color: var(--status-warn);
+}
+
+/* Upper Console: Bezel Keys + Recessed CRT/TFT Display */
+.atm-console {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 74px;
+  gap: 10px;
+  align-items: stretch;
+  background: #12161f;
+  padding: 14px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid #2c3546;
+  box-shadow: inset 0 4px 14px rgba(0, 0, 0, 0.65);
+}
+
+.bezel-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 14px;
+  padding-bottom: 42px;
+}
+
+.bezel-key {
+  height: 46px;
+  background: linear-gradient(180deg, #323b4c 0%, #202633 100%);
+  border: 1px solid #485368;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 9px;
+  color: #cbd5e1;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.78rem;
+  box-shadow:
+    0 3px 0 #0f131a,
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: transform var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.bezel-key:hover:not(:disabled) {
+  border-color: var(--text-accent);
+  color: #ffffff;
+}
+
+.bezel-key:active:not(:disabled),
+.bezel-key.key-pressed {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #0f131a;
+}
+
+.bezel-key.key-active {
+  border-color: rgba(56, 189, 248, 0.65);
+}
+
+.bezel-leader {
+  width: 12px;
+  height: 2px;
+  background: #64748b;
+}
+
+.bezel-key.key-active .bezel-leader {
+  background: var(--text-accent);
+  box-shadow: 0 0 6px var(--text-accent);
+}
+
+.screen-bezel {
+  background: #080b11;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 2px solid #2b3342;
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.9);
+}
+
+/* Lower Hardware Deck */
+.atm-hardware-deck {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.hardware-module {
+  background: var(--chassis-panel);
+  border: 1px solid #2d3646;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.module-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #232b38;
+}
+
+.module-title {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.module-tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: #0e131b;
+  border: 1px solid #293242;
+  color: var(--text-muted);
+}
+
+.hardware-peripherals {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.peripherals-top-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* Right Test Cards Wallet Dock */
+.test-bench-dock {
+  background: linear-gradient(180deg, #161c27 0%, #10151e 100%);
+  border: 1px solid #2b3445;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--chassis-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 18px;
+}
+
+.dock-header {
+  border-bottom: 1px solid #252e3d;
+  padding-bottom: 10px;
+}
+
+.dock-title {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #f8fafc;
+}
+
+.dock-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.test-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Bottom Environment Status Bar */
+.env-status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-modal);
+  background: rgba(11, 15, 23, 0.96);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid #293242;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+}
+
+.env-mode-group,
+.env-url-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.env-group-label {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.env-toggle-option {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.env-toggle-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.env-check-box {
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  transition: all var(--duration-fast) ease;
+}
+
+.env-toggle-option input:checked + .env-check-box {
+  color: var(--status-ok);
+  background: var(--status-ok-bg);
+  border-color: rgba(16, 185, 129, 0.35);
+  font-weight: 700;
+}
+
+.env-divider {
+  color: #334155;
+}
+
+.env-url-input {
+  width: 240px;
+  background: #141a24;
+  border: 1px solid #2f3a4d;
+  border-radius: var(--radius-xs);
+  padding: 4px 8px;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+}
+
+.env-action-btn {
+  padding: 4px 10px;
+  background: #1e293b;
+  border: 1px solid #3b4961;
+  border-radius: var(--radius-xs);
+  color: #e2e8f0;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.env-action-btn:hover {
+  border-color: var(--text-accent);
+  color: #ffffff;
+}
+
+.env-btn-secondary {
+  background: #171e2b;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1180px) {
+  .workspace-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .test-bench-dock {
+    position: static;
+  }
+
+  .test-cards-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .atm-console {
+    grid-template-columns: 1fr;
+  }
+
+  .bezel-column {
+    flex-direction: row;
+    padding-bottom: 0;
+    justify-content: space-between;
+  }
+
+  .bezel-key {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .bezel-leader {
+    display: none;
+  }
+
+  .atm-hardware-deck {
+    grid-template-columns: 1fr;
+  }
+
+  .peripherals-top-row {
+    grid-template-columns: 1fr;
+  }
+}

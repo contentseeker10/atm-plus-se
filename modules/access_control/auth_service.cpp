@@ -27,7 +27,8 @@ std::expected<bool, AuthError> AuthService::is_card_blocked(std::string_view car
     return {};
 }
 
-std::expected<void, AuthError> AuthService::reset_failed_attempts(std::string_view card) {
+std::expected<void, AuthError> AuthService::reset_failed_attempts(std::string_view card)
+{
     // TODO: UPDATE attempts in DB
     return {};
 }

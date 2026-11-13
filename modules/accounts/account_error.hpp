@@ -12,7 +12,8 @@
 
 #pragma once
 
-enum class AccountError {
+enum class AccountError
+{
     InvalidAmount,
     InsufficientFunds,
     BalanceOverflow,
