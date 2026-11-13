@@ -31,6 +31,8 @@
 constexpr std::chrono::seconds TIMEOUT = 60s;
 constexpr size_t MAX_ATTEMPTS = 3;
 
+inline constexpr std::string_view BANK_TREASURY_ACCOUNT_ID = "BANK_TREASURY";
+
 static_assert(std::is_nothrow_move_assignable_v<CashVault>);
 static_assert(std::is_copy_constructible_v<CashVault>);
 
@@ -326,6 +328,61 @@ std::expected<void, AtmError> AtmController::process_deposit(
     return commit_cash_operation(std::move(next_vault),
                                  {accounts->checking.get(), accounts->savings.get()},
                                  nonce, audit_mark);
+}
+
+std::expected<void, AtmError> AtmController::process_replenish(Denomination denomination,
+                                                               int count)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+    if (!_ledger->integrity_ok())
+        return std::unexpected(AtmError::CryptoVerificationFailed);
+
+    CashVault next_vault{*_vault};
+    if (auto loaded = next_vault.replenish(denomination, count); !loaded)
+    {
+        return std::unexpected(to_atm_error(loaded.error()));
+    }
+
+    const std::uint64_t nonce = ++_tx_nonce;
+    const std::size_t audit_mark = _audit_log->size();
+
+    LedgerEntry entry;
+    entry.debit_account_id = std::string(ATM_VAULT_ACCOUNT_ID);
+    entry.credit_account_id = std::string(BANK_TREASURY_ACCOUNT_ID);
+    entry.amount_cents = static_cast<std::int64_t>(denomination) * count;
+    entry.operation_type = "REPLENISHMENT";
+    entry.nonce = nonce;
+
+    if (auto posted = _audit_log->append_record(entry); !posted)
+    {
+        return std::unexpected(posted.error() == CryptoError::DatabaseError
+                                   ? AtmError::DatabaseError
+                                   : AtmError::InternalError);
+    }
+
+    return commit_cash_operation(std::move(next_vault), {}, nonce, audit_mark);
+}
+
+std::expected<void, AtmError> AtmController::open_vault_door()
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+
+    _vault->open_door();
+    return {};
+}
+
+std::expected<void, AtmError> AtmController::close_vault_door()
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+
+    _vault->close_door();
+    return {};
 }
 
 std::expected<void, AtmError> AtmController::require_role(UserRole role)

@@ -54,6 +54,10 @@ public:
     std::expected<void, AtmError> process_enter_pin(std::string_view pin);
     std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
+    std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
+
+    std::expected<void, AtmError> open_vault_door();
+    std::expected<void, AtmError> close_vault_door();
 
     const CashVault& get_vault() const noexcept { return *_vault; }
 
