@@ -31,4 +31,6 @@ namespace storage
     std::expected<void, DbError> save_account(sqlite3* db, const Account& account);
 
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory(sqlite3* db);
+
+    // TODO: add auth operations
 } // namespace storage

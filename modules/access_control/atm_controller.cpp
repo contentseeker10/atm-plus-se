@@ -60,10 +60,6 @@ std::expected<void, AtmError> AtmController::process_enter_pin(std::string_view 
 {
     std::unique_lock lock(_mtx);
     auto result = _current_state->enter_pin(*this, pin);
-    if (result.has_value())
-    {
-        _auth_service.reset_failed_attempts(_active_session->card_number);
-    }
     return result;
 }
 

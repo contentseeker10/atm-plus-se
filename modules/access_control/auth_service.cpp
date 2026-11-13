@@ -12,23 +12,31 @@
 
 #include "auth_service.hpp"
 
-std::expected<UserRole, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
-    // TODO: request to DB to get data
+std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view card) {
+    // Card is inserted, but state is still Idle
+    // TODO: validate that card is not expired/blocked before transition to CardInserted
     return {};
 }
 
-std::expected<bool, AuthError> AuthService::block_card(std::string_view card) {
+
+std::expected<UserRole, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
+    // TODO: compare pin with pin_hash + salt from _record
+    // TODO: block card if attempts to auth exceeded
+    // TODO: return CardRecord.UserRole or Error
+    return {};
+}
+
+std::expected<void, AuthError> AuthService::_block_card(std::string_view card) {
     // TODO: request to DB to block the card
     return {};
 }
 
-std::expected<bool, AuthError> AuthService::is_card_blocked(std::string_view card) {
+bool AuthService::_is_card_blocked(std::string_view card) const {
     // TODO: request to DB to know if card is blocked
     return {};
 }
 
-std::expected<void, AuthError> AuthService::reset_failed_attempts(std::string_view card)
-{
-    // TODO: UPDATE attempts in DB
+bool AuthService::_is_card_expired(std::string_view card) const {
+    // TODO: request to DB to know if card is expired
     return {};
 }
