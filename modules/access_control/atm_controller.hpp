@@ -18,6 +18,7 @@
 #include "auth_service.hpp"
 #include "session_context.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -25,14 +26,17 @@
 
 using namespace std::literals::chrono_literals;
 
+class Account;
 class CashVault;
 class AuditLog;
+class LedgerService;
 
 class AtmController
 {
 public:
     AtmController(std::unique_ptr<CashVault> vault, std::shared_ptr<DatabaseManager> db,
-                  std::shared_ptr<AuditLog> log, AuthService auth);
+                  std::shared_ptr<AuditLog> log, AuthService auth,
+                  std::shared_ptr<LedgerService> ledger);
     ~AtmController();
 
     AtmController(const AtmController&) = delete;
@@ -51,6 +55,8 @@ public:
     std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
 
+    const CashVault& get_vault() const noexcept { return *_vault; }
+
     std::expected<void, AtmError> validate_active_session();
     std::expected<UserRole, AtmError> authenticate_current_card(std::string_view card);
 
@@ -60,6 +66,11 @@ public:
     { return _current_state->get_state_name(); }
 
 private:
+    std::expected<void, AtmError> require_role(UserRole role);
+    std::expected<void, AtmError> commit_cash_operation(
+        CashVault next_vault, const std::vector<const Account*>& accounts,
+        std::uint64_t nonce, std::size_t audit_mark);
+
     std::optional<SessionContext> _active_session{std::nullopt};
 
     std::unique_ptr<IAtmState> _current_state{std::make_unique<IdleState>()};
@@ -67,8 +78,11 @@ private:
 
     std::shared_ptr<DatabaseManager> _db;
     std::shared_ptr<AuditLog> _audit_log;
+    std::shared_ptr<LedgerService> _ledger;
 
     AuthService _auth_service;
+
+    std::uint64_t _tx_nonce{0};
 
     mutable std::recursive_mutex _mtx;
 };
