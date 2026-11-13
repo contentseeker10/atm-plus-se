@@ -76,6 +76,12 @@ WHERE account_id = ?1
     inline constexpr std::string_view kSelectInventory =
         "SELECT denomination_cents, bill_count FROM vault_cassettes";
 
+    inline constexpr std::string_view kSelectCassettes =
+        "SELECT denomination_cents, bill_count, capacity FROM vault_cassettes";
+
+    inline constexpr std::string_view kUpdateCassetteCount =
+        "UPDATE vault_cassettes SET bill_count = ?1 WHERE denomination_cents = ?2";
+
     inline constexpr std::string_view kSelectCardAccounts = R"sql(
 SELECT a.account_id, a.linked_savings_id
 FROM cards AS c

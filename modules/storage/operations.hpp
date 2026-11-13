@@ -24,6 +24,7 @@
 struct sqlite3;
 
 class Account;
+class Cassette;
 
 namespace storage
 {
@@ -39,6 +40,11 @@ namespace storage
     std::expected<void, DbError> save_account(sqlite3* db, const Account& account);
 
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory(sqlite3* db);
+
+    std::expected<void, DbError> save_vault_inventory(
+        sqlite3* db, const std::map<Denomination, int>& inventory);
+
+    std::expected<std::map<Denomination, Cassette>, DbError> load_cassettes(sqlite3* db);
 
     std::expected<CardAccounts, DbError> load_card_accounts(sqlite3* db,
                                                             std::string_view card_number);
