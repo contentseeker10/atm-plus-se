@@ -16,6 +16,7 @@
 #include "sql.hpp"
 #include "sqlite_utils.hpp"
 
+#include <access_control/card.hpp>
 #include "accounts/account.hpp"
 
 #include <sqlite3.h>
@@ -91,5 +92,22 @@ namespace storage
         if (rc != SQLITE_DONE) return std::unexpected(to_db_error(rc));
 
         return inventory;
+    }
+
+    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card) {
+        auto stmt = prepare(db, sql::kSelectCardRecord);
+        if (!stmt) {
+            return std::unexpected(stmt.error());
+        }
+
+        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK) {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        switch (const int rc = sqlite3_step(stmt->get())) {
+            case SQLITE_ROW:  return read_card(stmt->get());
+            case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
+            default:          return std::unexpected(to_db_error(rc));
+        }
     }
 } // namespace storage

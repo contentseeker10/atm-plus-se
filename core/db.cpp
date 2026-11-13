@@ -12,7 +12,10 @@
 
 #include "db.hpp"
 
+#include "access_control/card.hpp"
+
 #include "accounts/account.hpp"
+
 #include "storage/operations.hpp"
 #include "storage/sql.hpp"
 #include "storage/sqlite_utils.hpp"
@@ -82,4 +85,9 @@ std::expected<std::map<Denomination, int>, DbError> DatabaseManager::
 {
     std::scoped_lock lock{_db_mutex};
     return storage::load_vault_inventory(_db_handle.get());
+}
+
+std::expected<CardRecord, DbError> DatabaseManager::load_card(std::string_view card) {
+    std::scoped_lock lock{_db_mutex};
+    return storage::load_card(_db_handle.get(), card);
 }

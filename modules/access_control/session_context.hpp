@@ -14,6 +14,8 @@
 
 #include "enums.hpp"
 
+#include "card.hpp"
+
 #include <chrono>
 #include <string>
 
@@ -27,9 +29,12 @@ public:
     { }
 
     std::string session_id;
-    std::string card_number;
 
+    std::string card_number;
     UserRole role{UserRole::None};
+
+    // TODO: store CardRecord instead of separate card_number, role
+    // CardRecord record;
 
     clock::time_point last_activity{clock::now()};
 

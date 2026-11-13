@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS cards (
     card_holder         TEXT NOT NULL,
     pin_hash            TEXT NOT NULL,
     salt                TEXT NOT NULL,
-    role                TEXT NOT NULL CHECK (role IN ('customer', 'engineer')),
+    role                INTEGER NOT NULL DEFAULT 0 CHECK (role IN (0, 1, 2)),
     is_blocked          INTEGER NOT NULL DEFAULT 0 CHECK (is_blocked IN (0, 1)),
     is_expired          INTEGER NOT NULL DEFAULT 0 CHECK (is_expired IN (0, 1)),
     failed_attempts     INTEGER NOT NULL DEFAULT 0,
@@ -75,4 +75,7 @@ WHERE account_id = ?1
 
     inline constexpr std::string_view kSelectInventory =
         "SELECT denomination_cents, bill_count FROM vault_cassettes";
+
+    inline constexpr std::string_view kSelectCardRecord =
+        "SELECT * FROM card WHERE card_number = ?1";
 } // namespace storage::sql

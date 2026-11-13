@@ -25,6 +25,7 @@
 struct sqlite3;
 
 class Account;
+struct CardRecord;
 
 class DatabaseManager
 {
@@ -42,6 +43,8 @@ public:
     std::expected<void, DbError> execute_transaction(
         std::function<bool(sqlite3*)> tx_block);
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory();
+
+    std::expected<CardRecord, DbError> load_card(std::string_view card);
 
 private:
     struct SqliteDeleter

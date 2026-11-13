@@ -22,10 +22,13 @@
 struct sqlite3_stmt;
 
 class Account;
+struct CardRecord;
 
 namespace storage
 {
     std::expected<std::unique_ptr<Account>, DbError> read_account(sqlite3_stmt* row);
 
     std::optional<Denomination> to_denomination(std::int64_t cents) noexcept;
+
+    std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row);
 } // namespace storage

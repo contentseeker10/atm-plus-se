@@ -18,8 +18,21 @@
 #include <optional>
 
 struct CardRecord final {
-    std::string card_number;
-    std::string card_holder;
+    CardRecord(std::string card_number, std::string card_holder, std::string pin, std::string sal, 
+            std::optional<std::string> account, UserRole rol, bool blocked, bool expired, int failed_atmps) 
+    : number{std::move(card_number)},
+      holder{std::move(card_holder)},
+      pin_hash{std::move(pin)},
+      salt{std::move(sal)},
+      account_id{std::move(account)},
+      role{rol},
+      is_blocked{blocked},
+      is_expired{expired},
+      failed_attempts{failed_atmps}
+    {}
+
+    std::string number;
+    std::string holder;
     std::string pin_hash;
     std::string salt;
 

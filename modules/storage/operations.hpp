@@ -22,6 +22,7 @@
 struct sqlite3;
 
 class Account;
+struct CardRecord;
 
 namespace storage
 {
@@ -32,5 +33,5 @@ namespace storage
 
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory(sqlite3* db);
 
-    // TODO: add auth operations
+    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card);
 } // namespace storage
