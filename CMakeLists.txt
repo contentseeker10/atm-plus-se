@@ -12,7 +12,7 @@ find_package(SQLite3 REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 if (MSVC)
-    add_compile_options(/Wall /utf-8)
+    add_compile_options(/W4 /permissive- /utf-8)
 else()
     add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic)
 endif()
@@ -47,6 +47,7 @@ add_executable(AtmPlusSe
     modules/storage/transaction.cpp
 
     modules/accounting/ledger_service.cpp
+    modules/access_control/card.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 
