@@ -113,6 +113,16 @@ std::expected<void, VaultError> CashVault::deposit_bills(
     return {};
 }
 
+std::expected<void, VaultError> CashVault::replenish(Denomination denomination, int count)
+{
+    if (_is_door_closed) return std::unexpected(VaultError::DoorClosed);
+
+    const auto cassette = _cassettes.find(denomination);
+    if (cassette == _cassettes.end()) return std::unexpected(VaultError::MissingCassette);
+
+    return cassette->second.add_bills(count);
+}
+
 std::int64_t CashVault::get_total_cash_cents() const noexcept
 {
     std::int64_t total = 0;

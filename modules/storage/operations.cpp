@@ -17,10 +17,12 @@
 #include "sqlite_utils.hpp"
 
 #include "accounts/account.hpp"
+#include "cash/cassette.hpp"
 
 #include <sqlite3.h>
 
 #include <cstdint>
+#include <stdexcept>
 #include <utility>
 
 namespace storage
@@ -91,5 +93,93 @@ namespace storage
         if (rc != SQLITE_DONE) return std::unexpected(to_db_error(rc));
 
         return inventory;
+    }
+
+    std::expected<void, DbError> save_vault_inventory(
+        sqlite3* db, const std::map<Denomination, int>& inventory)
+    {
+        auto stmt = prepare(db, sql::kUpdateCassetteCount);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        for (auto it = inventory.cbegin(); it != inventory.cend(); ++it)
+        {
+            sqlite3_reset(stmt->get());
+
+            if (const int rc = sqlite3_bind_int64(stmt->get(), 1, it->second);
+                rc != SQLITE_OK)
+            {
+                return std::unexpected(to_db_error(rc));
+            }
+            if (const int rc = sqlite3_bind_int64(stmt->get(), 2,
+                                                  static_cast<std::int64_t>(it->first));
+                rc != SQLITE_OK)
+            {
+                return std::unexpected(to_db_error(rc));
+            }
+
+            if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
+            {
+                return std::unexpected(to_db_error(rc));
+            }
+            if (sqlite3_changes64(db) == 0)
+                return std::unexpected(DbError::RecordNotFound);
+        }
+        return {};
+    }
+
+    std::expected<std::map<Denomination, Cassette>, DbError> load_cassettes(sqlite3* db)
+    {
+        auto stmt = prepare(db, sql::kSelectCassettes);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        std::map<Denomination, Cassette> cassettes;
+        int rc = SQLITE_ROW;
+        while ((rc = sqlite3_step(stmt->get())) == SQLITE_ROW)
+        {
+            const auto denomination =
+                to_denomination(sqlite3_column_int64(stmt->get(), 0));
+            const std::int64_t count = sqlite3_column_int64(stmt->get(), 1);
+            const std::int64_t capacity = sqlite3_column_int64(stmt->get(), 2);
+            if (!denomination || !std::in_range<int>(count) ||
+                !std::in_range<int>(capacity))
+            {
+                return std::unexpected(DbError::ConstraintViolation);
+            }
+
+            try
+            {
+                cassettes.emplace(*denomination,
+                                  Cassette{*denomination, static_cast<int>(count),
+                                           static_cast<int>(capacity)});
+            }
+            catch (const std::invalid_argument&)
+            {
+                return std::unexpected(DbError::ConstraintViolation);
+            }
+        }
+        if (rc != SQLITE_DONE) return std::unexpected(to_db_error(rc));
+
+        return cassettes;
+    }
+
+    std::expected<CardAccounts, DbError> load_card_accounts(sqlite3* db,
+                                                            std::string_view card_number)
+    {
+        auto stmt = prepare(db, sql::kSelectCardAccounts);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        if (const int rc = bind_text(stmt->get(), 1, card_number); rc != SQLITE_OK)
+        {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        switch (const int rc = sqlite3_step(stmt->get()))
+        {
+        case SQLITE_ROW:
+            return CardAccounts{column_text(stmt->get(), 0),
+                                column_optional_text(stmt->get(), 1)};
+        case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
+        default: return std::unexpected(to_db_error(rc));
+        }
     }
 } // namespace storage
