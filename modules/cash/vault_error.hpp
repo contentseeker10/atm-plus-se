@@ -18,6 +18,7 @@ enum class VaultError
     CassetteFull,
     InsufficientBills,
     DoorOpen,
+    DoorClosed,
     InvalidAmount,
     NoExactCombination,
     InsufficientCash,
