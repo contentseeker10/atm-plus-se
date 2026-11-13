@@ -47,6 +47,18 @@ CREATE TABLE IF NOT EXISTS vault_cassettes (
     CHECK (bill_count BETWEEN 0 AND capacity)
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS cards (
+    card_number         TEXT PRIMARY KEY,
+    card_holder         TEXT NOT NULL,
+    pin_hash            TEXT NOT NULL,
+    salt                TEXT NOT NULL,
+    role                TEXT NOT NULL CHECK (role IN ('customer', 'engineer')),
+    is_blocked          INTEGER NOT NULL DEFAULT 0 CHECK (is_blocked IN (0, 1)),
+    is_expired          INTEGER NOT NULL DEFAULT 0 CHECK (is_expired IN (0, 1)),
+    failed_attempts     INTEGER NOT NULL DEFAULT 0,
+    checking_account_id TEXT REFERENCES accounts(account_id)
+) STRICT;
+
 COMMIT;
 )sql";
 
