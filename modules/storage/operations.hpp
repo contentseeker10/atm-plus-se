@@ -23,10 +23,12 @@ struct sqlite3;
 
 class Account;
 
-namespace storage {
-    std::expected<std::unique_ptr<Account>, DbError> load_account(sqlite3* db, std::string_view account_id);
+namespace storage
+{
+    std::expected<std::unique_ptr<Account>, DbError> load_account(
+        sqlite3* db, std::string_view account_id);
 
     std::expected<void, DbError> save_account(sqlite3* db, const Account& account);
 
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory(sqlite3* db);
-}
+} // namespace storage

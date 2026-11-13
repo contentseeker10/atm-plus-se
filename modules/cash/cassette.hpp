@@ -16,7 +16,8 @@
 #include "vault_error.hpp"
 #include <expected>
 
-class Cassette {
+class Cassette
+{
 public:
     explicit Cassette(Denomination denomination, int count, int max_capacity);
 

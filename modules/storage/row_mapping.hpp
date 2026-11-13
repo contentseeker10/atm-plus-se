@@ -23,8 +23,9 @@ struct sqlite3_stmt;
 
 class Account;
 
-namespace storage {
+namespace storage
+{
     std::expected<std::unique_ptr<Account>, DbError> read_account(sqlite3_stmt* row);
 
     std::optional<Denomination> to_denomination(std::int64_t cents) noexcept;
-}
+} // namespace storage

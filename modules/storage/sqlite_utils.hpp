@@ -22,10 +22,10 @@
 #include <string>
 #include <string_view>
 
-namespace storage {
-    struct StatementDeleter {
-        void operator()(sqlite3_stmt* stmt) const noexcept;
-    };
+namespace storage
+{
+    struct StatementDeleter
+    { void operator()(sqlite3_stmt* stmt) const noexcept; };
 
     using Statement = std::unique_ptr<sqlite3_stmt, StatementDeleter>;
 
@@ -40,4 +40,4 @@ namespace storage {
     std::string column_text(sqlite3_stmt* stmt, int column);
 
     std::optional<std::string> column_optional_text(sqlite3_stmt* stmt, int column);
-}
+} // namespace storage

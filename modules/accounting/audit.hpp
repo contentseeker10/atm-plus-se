@@ -12,8 +12,8 @@
 
 #pragma once
 
-#include "enums.hpp"
 #include "db.hpp"
+#include "enums.hpp"
 
 #include "ledger.hpp"
 
@@ -24,21 +24,23 @@
 #include <string>
 #include <vector>
 
-struct ChainVerification {
+struct ChainVerification
+{
     bool ok{};
     std::size_t first_broken_index{};
     std::string detail;
 };
 
-class AuditLog {
+class AuditLog
+{
 public:
     AuditLog(std::shared_ptr<DatabaseManager> db, std::string hmac_secret_key);
     ~AuditLog() = default;
 
-    AuditLog(const AuditLog&)            = delete;
+    AuditLog(const AuditLog&) = delete;
     AuditLog& operator=(const AuditLog&) = delete;
-    AuditLog(AuditLog&&)                 = delete;
-    AuditLog& operator=(AuditLog&&)      = delete;
+    AuditLog(AuditLog&&) = delete;
+    AuditLog& operator=(AuditLog&&) = delete;
 
     std::expected<std::string, CryptoError> append_record(LedgerEntry& entry);
 

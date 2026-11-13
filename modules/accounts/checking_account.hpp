@@ -16,10 +16,12 @@
 
 #include <optional>
 
-class CheckingAccount final : public Account {
+class CheckingAccount final : public Account
+{
 public:
-    CheckingAccount(std::string account_id, std::string client_id, std::int64_t balance_cents,
-                    std::int64_t client_min_cents, std::int64_t overflow_max_cents,
+    CheckingAccount(std::string account_id, std::string client_id,
+                    std::int64_t balance_cents, std::int64_t client_min_cents,
+                    std::int64_t overflow_max_cents,
                     std::optional<std::string> linked_savings_id);
 
     std::expected<void, AccountError> withdraw(std::int64_t amount_cents) override;

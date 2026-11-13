@@ -72,7 +72,7 @@ struct InvCheckReport
 
 class LedgerService
 {
-  public:
+public:
     LedgerService(std::shared_ptr<AuditLog> audit_log,
                   std::shared_ptr<AntiReplayManager> anti_replay);
 
@@ -104,7 +104,7 @@ class LedgerService
 
     bool integrity_ok() const noexcept;
 
-  private:
+private:
     std::expected<void, LedgerError> append_entries(std::vector<LedgerEntry> entries);
     std::expected<void, LedgerError> claim_nonce(std::uint64_t nonce,
                                                  std::string_view idempotency_key);

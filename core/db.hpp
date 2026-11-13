@@ -26,7 +26,8 @@ struct sqlite3;
 
 class Account;
 
-class DatabaseManager {
+class DatabaseManager
+{
 public:
     explicit DatabaseManager(std::string_view path);
 
@@ -35,14 +36,16 @@ public:
     DatabaseManager(DatabaseManager&&) = delete;
     DatabaseManager& operator=(DatabaseManager&&) = delete;
 
-    std::expected<std::unique_ptr<Account>, DbError> load_account(std::string_view account_id);
+    std::expected<std::unique_ptr<Account>, DbError> load_account(
+        std::string_view account_id);
     std::expected<void, DbError> save_account(const Account& account);
-    std::expected<void, DbError> execute_transaction(std::function<bool(sqlite3*)> tx_block);
+    std::expected<void, DbError> execute_transaction(
+        std::function<bool(sqlite3*)> tx_block);
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory();
+
 private:
-    struct SqliteDeleter {
-        void operator()(sqlite3* db) const noexcept;
-    };
+    struct SqliteDeleter
+    { void operator()(sqlite3* db) const noexcept; };
 
     std::unique_ptr<sqlite3, SqliteDeleter> _db_handle;
     std::string _db_path;

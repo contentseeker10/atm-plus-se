@@ -12,7 +12,8 @@
 
 #pragma once
 
-enum class VaultError {
+enum class VaultError
+{
     InvalidCount,
     CassetteFull,
     InsufficientBills,

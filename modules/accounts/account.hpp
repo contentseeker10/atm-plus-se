@@ -18,7 +18,8 @@
 #include <expected>
 #include <string>
 
-class Account {
+class Account
+{
 public:
     virtual ~Account() noexcept;
 

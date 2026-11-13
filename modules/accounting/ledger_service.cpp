@@ -26,14 +26,10 @@ namespace
 
         switch (e)
         {
-        case InvalidAmount:
-            return LedgerError::InvalidAmount;
-        case InsufficientFunds:
-            return LedgerError::InsufficientFunds;
-        case BalanceOverflow:
-            return LedgerError::AuditFailure;
-        case NoOverdraftProtection:
-            return LedgerError::NoOverdraftCoverage;
+        case InvalidAmount: return LedgerError::InvalidAmount;
+        case InsufficientFunds: return LedgerError::InsufficientFunds;
+        case BalanceOverflow: return LedgerError::AuditFailure;
+        case NoOverdraftProtection: return LedgerError::NoOverdraftCoverage;
         }
         return LedgerError::AuditFailure;
     }
@@ -42,8 +38,7 @@ namespace
 LedgerService::LedgerService(std::shared_ptr<AuditLog> audit_log,
                              std::shared_ptr<AntiReplayManager> anti_replay)
     : _audit_log{std::move(audit_log)}, _anti_replay{std::move(anti_replay)}
-{
-}
+{ }
 
 bool LedgerService::integrity_ok() const noexcept { return !_integrity_compromised; }
 
@@ -91,8 +86,7 @@ std::expected<void, LedgerError> LedgerService::append_entries(
         {
         case CryptoError::EntryNotBalanced:
             return std::unexpected(LedgerError::UnbalancedEntry);
-        default:
-            return std::unexpected(LedgerError::AuditFailure);
+        default: return std::unexpected(LedgerError::AuditFailure);
         }
     }
     return {};

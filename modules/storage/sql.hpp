@@ -14,7 +14,8 @@
 
 #include <string_view>
 
-namespace storage::sql {
+namespace storage::sql
+{
     inline constexpr char kSchema[] = R"sql(
 BEGIN;
 
@@ -62,4 +63,4 @@ WHERE account_id = ?1
 
     inline constexpr std::string_view kSelectInventory =
         "SELECT denomination_cents, bill_count FROM vault_cassettes";
-}
+} // namespace storage::sql

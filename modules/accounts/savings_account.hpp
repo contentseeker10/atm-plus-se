@@ -14,10 +14,12 @@
 
 #include "account.hpp"
 
-class SavingsAccount final : public Account {
+class SavingsAccount final : public Account
+{
 public:
-    SavingsAccount(std::string account_id, std::string client_id, std::int64_t balance_cents,
-                   double annual_interest_rate, std::int64_t minimum_balance_cents);
+    SavingsAccount(std::string account_id, std::string client_id,
+                   std::int64_t balance_cents, double annual_interest_rate,
+                   std::int64_t minimum_balance_cents);
 
     std::expected<void, AccountError> withdraw(std::int64_t amount_cents) override;
 
