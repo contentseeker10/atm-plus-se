@@ -92,4 +92,25 @@ namespace storage
 
         return inventory;
     }
+
+    std::expected<CardAccounts, DbError> load_card_accounts(sqlite3* db,
+                                                            std::string_view card_number)
+    {
+        auto stmt = prepare(db, sql::kSelectCardAccounts);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        if (const int rc = bind_text(stmt->get(), 1, card_number); rc != SQLITE_OK)
+        {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        switch (const int rc = sqlite3_step(stmt->get()))
+        {
+        case SQLITE_ROW:
+            return CardAccounts{column_text(stmt->get(), 0),
+                                column_optional_text(stmt->get(), 1)};
+        case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
+        default: return std::unexpected(to_db_error(rc));
+        }
+    }
 } // namespace storage
