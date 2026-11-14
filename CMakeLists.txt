@@ -79,6 +79,7 @@ add_executable(atm_tests
     tests/test_aps.cpp
     tests/test_ledger_persistence.cpp
     tests/test_atm_cash.cpp
+    tests/test_seed.cpp
 
     modules/access_control/atm_controller.cpp
     modules/access_control/atm_state.cpp
