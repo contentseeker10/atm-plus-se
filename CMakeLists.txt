@@ -17,6 +17,17 @@ else()
     add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic)
 endif()
 
+option(ATM_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+if (ATM_ENABLE_ASAN)
+    if (MSVC)
+        add_compile_options(/fsanitize=address /Zi)
+        add_link_options(/INCREMENTAL:NO /DEBUG)
+    else()
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
+endif()
+
 add_executable(AtmPlusSe 
     main/main.cpp
 
@@ -48,7 +59,6 @@ add_executable(AtmPlusSe
     modules/storage/transaction.cpp
 
     modules/accounting/ledger_service.cpp
-    modules/access_control/card.cpp
 )
 
 target_include_directories(AtmPlusSe PRIVATE 
