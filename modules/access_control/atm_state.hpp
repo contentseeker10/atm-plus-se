@@ -26,19 +26,15 @@ public:
 
     [[nodiscard]] virtual std::string_view get_state_name() const noexcept = 0;
 
-    virtual std::expected<void, AtmError> insert_card(AtmController& ctx,
-                                                      std::string_view card_number)
+    virtual std::expected<void, AtmError> insert_card(AtmController&, std::string_view)
     { return std::unexpected(AtmError::InvalidStateTransition); }
-    virtual std::expected<void, AtmError> enter_pin(AtmController& ctx,
-                                                    std::string_view pin)
+    virtual std::expected<void, AtmError> enter_pin(AtmController&, std::string_view)
     { return std::unexpected(AtmError::InvalidStateTransition); }
-    virtual std::expected<void, AtmError> select_service(AtmController& ctx,
-                                                         ServiceType service)
+    virtual std::expected<void, AtmError> select_service(AtmController&, ServiceType)
     { return std::unexpected(AtmError::InvalidStateTransition); }
-    virtual std::expected<void, AtmError> eject_card(AtmController& ctx)
+    virtual std::expected<void, AtmError> eject_card(AtmController&)
     { return std::unexpected(AtmError::InvalidStateTransition); }
-    virtual std::expected<void, AtmError> open_vault(AtmController& ctx,
-                                                     std::string_view engineer_key)
+    virtual std::expected<void, AtmError> open_vault(AtmController&, std::string_view)
     { return std::unexpected(AtmError::InvalidStateTransition); }
 };
 

@@ -14,6 +14,8 @@
 
 #include "db.hpp"
 
+#include "accounting/audit.hpp"
+
 #include "atm_state.hpp"
 #include "auth_service.hpp"
 #include "card.hpp"
@@ -23,14 +25,26 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 using namespace std::literals::chrono_literals;
 
 class Account;
+class AntiReplayManager;
 class CashVault;
-class AuditLog;
 class LedgerService;
+
+struct CustomerAccountSnapshot
+{
+    std::string checking_id;
+    std::int64_t checking_balance_cents{};
+    std::int64_t client_min_cents{};
+    std::int64_t overflow_max_cents{};
+    std::string savings_id;
+    std::int64_t savings_balance_cents{};
+};
 
 class AtmController
 {
@@ -53,13 +67,24 @@ public:
 
     std::expected<void, AtmError> process_insert_card(std::string_view card);
     std::expected<void, AtmError> process_enter_pin(std::string_view pin);
+    std::expected<void, AtmError> process_select_service(ServiceType service);
     std::expected<void, AtmError> process_eject_card();
+    std::expected<void, AtmError> process_open_vault(std::string_view engineer_key);
     std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
+    std::expected<void, AtmError> process_transfer(std::string_view from_account,
+                                                   std::string_view to_account,
+                                                   std::int64_t amount_cents,
+                                                   std::string_view idempotency_key = "");
     std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
+
+    std::expected<CustomerAccountSnapshot, AtmError> get_customer_accounts();
+    std::expected<std::vector<LedgerEntry>, AtmError> get_audit_entries();
+    std::expected<ChainVerification, AtmError> verify_audit_integrity();
 
     std::expected<void, AtmError> open_vault_door();
     std::expected<void, AtmError> close_vault_door();
+    bool verify_engineer_key(std::string_view engineer_key) const noexcept;
 
     const CashVault& get_vault() const noexcept { return *_vault; }
 
@@ -68,6 +93,7 @@ public:
     std::expected<void, AtmError>       validate_session();
 
     std::optional<std::string> get_active_session_id() const;
+    std::optional<CardRecord>  get_active_card()       const;
     UserRole                   get_active_role()       const;
 
     std::string_view get_current_state_name() const
@@ -75,15 +101,18 @@ public:
 
 private:
     inline static constexpr std::chrono::seconds kTimeout = 60s;
+    inline static constexpr std::string_view kDefaultEngineerKey = "ENG-MASTER-KEY-2026";
 
     std::expected<void, AtmError> require_role(UserRole role);
+    std::expected<void, AtmError> consume_session_nonce();
     std::expected<void, AtmError> commit_cash_operation(
         CashVault next_vault, const std::vector<const Account*>& accounts,
         std::uint64_t nonce, std::size_t audit_mark);
 
-    std::shared_ptr<DatabaseManager> _db;
-    std::shared_ptr<AuditLog>        _audit_log;
-    std::shared_ptr<LedgerService>   _ledger;
+    std::shared_ptr<DatabaseManager>   _db;
+    std::shared_ptr<AuditLog>          _audit_log;
+    std::shared_ptr<LedgerService>     _ledger;
+    std::shared_ptr<AntiReplayManager> _anti_replay;
 
     std::optional<SessionContext> _active_session{std::nullopt};
 

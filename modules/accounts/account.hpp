@@ -25,6 +25,8 @@ public:
 
     const std::string& get_account_id() const noexcept;
 
+    const std::string& get_client_id() const noexcept;
+
     std::int64_t get_balance() const noexcept;
 
     std::expected<void, AccountError> deposit(std::int64_t amount_cents);

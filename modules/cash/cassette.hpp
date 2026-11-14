@@ -25,6 +25,8 @@ public:
 
     int get_count() const noexcept;
 
+    int get_max_capacity() const noexcept;
+
     bool can_accept(int count) const noexcept;
 
     bool can_dispense(int count) const noexcept;

@@ -19,6 +19,8 @@
 
 #include "cash/cash_vault.hpp"
 
+#include "crypto.hpp"
+
 #include "storage/operations.hpp"
 #include "storage/sqlite_utils.hpp"
 
@@ -415,5 +417,186 @@ TEST(atm_full_cycle_passes_inv_check)
     CHECK(report.passed);
     for (const auto& failure : report.failures) std::cout << "    " << failure << '\n';
     CHECK(f.atm->get_vault().get_total_cash_cents() == 155000);
+    done();
+}
+
+TEST(atm_customer_accounts_and_transfer)
+{
+    begin("Customer account query and internal transfers through AtmController");
+    AtmFixture f{{.checking_cents = 50000,
+                  .client_min_cents = 10000,
+                  .overflow_max_cents = 100000,
+                  .savings_cents = 20000},
+                 "(10000, 10, 100)"};
+
+    auto unauth = f.atm->get_customer_accounts();
+    CHECK(!unauth.has_value());
+    CHECK(unauth.error() == AtmError::NoActiveSession);
+
+    f.login(kCustomerCard, UserRole::Customer);
+
+    const auto snap = f.atm->get_customer_accounts();
+    CHECK(snap.has_value());
+    if (snap)
+    {
+        CHECK(snap->checking_id == "CHK-1");
+        CHECK(snap->checking_balance_cents == 50000);
+        CHECK(snap->client_min_cents == 10000);
+        CHECK(snap->overflow_max_cents == 100000);
+        CHECK(snap->savings_id == "SAV-1");
+        CHECK(snap->savings_balance_cents == 20000);
+    }
+
+    CHECK(f.atm->process_transfer("Checking", "Savings", 20000).has_value());
+    CHECK(f.balance("CHK-1") == 30000);
+    CHECK(f.balance("SAV-1") == 40000);
+
+    CHECK(f.atm->process_transfer("Savings", "Checking", 10000).has_value());
+    CHECK(f.balance("CHK-1") == 40000);
+    CHECK(f.balance("SAV-1") == 30000);
+
+    const auto below_min = f.atm->process_transfer("Checking", "Savings", 35000);
+    CHECK(!below_min.has_value());
+    CHECK(below_min.error() == AtmError::InsufficientFunds);
+    CHECK(f.balance("CHK-1") == 40000);
+    CHECK(f.balance("SAV-1") == 30000);
+
+    const auto self_tx = f.atm->process_transfer("Checking", "Checking", 1000);
+    CHECK(!self_tx.has_value());
+    CHECK(self_tx.error() == AtmError::InvalidAmount);
+    done();
+}
+
+TEST(atm_transfer_to_external_account_and_replay_check)
+{
+    begin("External card transfer and idempotency key replay protection");
+    AtmFixture f{{.checking_cents = 60000,
+                  .client_min_cents = 0,
+                  .overflow_max_cents = 200000,
+                  .savings_cents = 10000},
+                 "(10000, 10, 100)"};
+
+    const bool seeded_ext =
+        f.db->execute_transaction(
+                [](sqlite3* raw)
+                {
+                    return storage::exec(
+                               raw,
+                               "INSERT INTO accounts (account_id, client_id, type, "
+                               "balance_cents, client_min_cents, overflow_max_cents) "
+                               "VALUES ('CHK-2', 'olena', 'checking', 5000, 0, 200000); "
+                               "INSERT INTO cards (card_number, card_holder, pin_hash, "
+                               "salt, role, checking_account_id) "
+                               "VALUES ('4000000000000002', 'olena', 'h', 's', 0, "
+                               "'CHK-2');")
+                        .has_value();
+                })
+            .has_value();
+    CHECK(seeded_ext);
+
+    f.login(kCustomerCard, UserRole::Customer);
+
+    const auto tx =
+        f.atm->process_transfer("Checking", "4000000000000002", 15000, "idemp-ext-1");
+    CHECK(tx.has_value());
+    CHECK(f.balance("CHK-1") == 45000);
+    CHECK(f.balance("CHK-2") == 20000);
+
+    const auto log = f.audit->entries();
+    CHECK(log.size() == 1);
+    if (log.size() == 1)
+    {
+        CHECK(log[0].operation_type == "TRANSFER");
+        CHECK(log[0].debit_account_id == "CHK-1");
+        CHECK(log[0].credit_account_id == "CHK-2");
+        CHECK(log[0].amount_cents == 15000);
+    }
+
+    const auto replay =
+        f.atm->process_transfer("Checking", "4000000000000002", 15000, "idemp-ext-1");
+    CHECK(!replay.has_value());
+    CHECK(replay.error() == AtmError::ReplayAttackDetected);
+    CHECK(f.balance("CHK-1") == 45000);
+    CHECK(f.balance("CHK-2") == 20000);
+
+    const auto unknown = f.atm->process_transfer("Checking", "9999999999999999", 1000);
+    CHECK(!unknown.has_value());
+    CHECK(unknown.error() == AtmError::CardNotFound);
+    done();
+}
+
+TEST(atm_fsm_service_selection_and_engineer_audit)
+{
+    begin("FSM service selection, engineer vault open key and audit verification");
+    AtmFixture f{{.checking_cents = 40000}, "(10000, 10, 100)"};
+
+    const std::string customer_hash = crypto::sha256_hex("1234", "salt123");
+    const std::string engineer_hash = crypto::sha256_hex("0000", "salt456");
+    const std::string update_cards_sql = std::format(R"sql(
+UPDATE cards SET pin_hash = '{0}', salt = 'salt123', role = 0 WHERE card_number = '{1}';
+UPDATE cards SET pin_hash = '{2}', salt = 'salt456', role = 1 WHERE card_number = '{3}';
+)sql",
+                                                     customer_hash, kCustomerCard,
+                                                     engineer_hash, kEngineerCard);
+
+    const bool updated =
+        f.db->execute_transaction(
+                [&update_cards_sql](sqlite3* raw)
+                { return storage::exec(raw, update_cards_sql.c_str()).has_value(); })
+            .has_value();
+    CHECK(updated);
+
+    CHECK(f.atm->process_insert_card(kCustomerCard).has_value());
+    CHECK(f.atm->get_current_state_name() == "CardInserted");
+    CHECK(f.atm->process_enter_pin("1234").has_value());
+    CHECK(f.atm->get_current_state_name() == "CustomerSession");
+    CHECK(f.atm->get_active_card().has_value());
+    CHECK(f.atm->get_active_card()->holder == "yosyp");
+
+    CHECK(f.atm->process_select_service(ServiceType::Transfer).has_value());
+    const auto forbidden_svc =
+        f.atm->process_select_service(ServiceType::EngineerMaintenance);
+    CHECK(!forbidden_svc.has_value());
+    CHECK(forbidden_svc.error() == AtmError::Unauthorized);
+
+    const auto customer_vault = f.atm->process_open_vault("ENG-MASTER-KEY-2026");
+    CHECK(!customer_vault.has_value());
+    CHECK(customer_vault.error() == AtmError::InvalidStateTransition);
+
+    CHECK(f.atm->process_eject_card().has_value());
+    CHECK(f.atm->get_current_state_name() == "Idle");
+    CHECK(!f.atm->get_active_session_id().has_value());
+    CHECK(!f.atm->get_active_card().has_value());
+
+    CHECK(f.atm->process_insert_card(kEngineerCard).has_value());
+    CHECK(f.atm->process_enter_pin("0000").has_value());
+    CHECK(f.atm->get_current_state_name() == "EngineerSession");
+    CHECK(f.atm->get_vault().is_door_closed());
+
+    const auto bad_key = f.atm->process_open_vault("WRONG-KEY");
+    CHECK(!bad_key.has_value());
+    CHECK(bad_key.error() == AtmError::VaultAccessDenied);
+    CHECK(f.atm->get_vault().is_door_closed());
+
+    CHECK(f.atm->process_open_vault("ENG-MASTER-KEY-2026").has_value());
+    CHECK(!f.atm->get_vault().is_door_closed());
+    CHECK(f.atm->process_replenish(Denomination::D_100, 2).has_value());
+    CHECK(f.atm->close_vault_door().has_value());
+    CHECK(f.atm->get_vault().is_door_closed());
+
+    const auto audit_entries = f.atm->get_audit_entries();
+    CHECK(audit_entries.has_value());
+    if (audit_entries)
+    {
+        CHECK(audit_entries->size() == 1);
+        CHECK((*audit_entries)[0].operation_type == "REPLENISHMENT");
+    }
+
+    const auto chain = f.atm->verify_audit_integrity();
+    CHECK(chain.has_value() && chain->ok);
+
+    CHECK(f.atm->process_eject_card().has_value());
+    CHECK(f.atm->get_current_state_name() == "Idle");
+    CHECK(!f.atm->get_active_session_id().has_value());
     done();
 }

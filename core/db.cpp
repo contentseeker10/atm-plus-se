@@ -44,7 +44,8 @@ DatabaseManager::DatabaseManager(std::string_view path) : _db_path{path}
 
     sqlite3_busy_timeout(_db_handle.get(), 5000);
 
-    if (!storage::exec(_db_handle.get(), "PRAGMA foreign_keys = ON") ||
+    if (!storage::exec(_db_handle.get(), "PRAGMA journal_mode = WAL") ||
+        !storage::exec(_db_handle.get(), "PRAGMA foreign_keys = ON") ||
         !storage::exec(_db_handle.get(), storage::sql::kSchema))
     {
         throw std::runtime_error(std::format("cannot initialise database '{}': {}",

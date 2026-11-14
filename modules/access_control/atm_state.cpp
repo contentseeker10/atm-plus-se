@@ -63,8 +63,18 @@ std::expected<void, AtmError> CardInsertedState::eject_card(AtmController& ctx) 
 }
 
 std::expected<void, AtmError> CustomerSessionState::select_service(
-    AtmController& /*ctx*/, ServiceType /*service*/)
-{ return {}; }
+    AtmController& ctx, ServiceType service)
+{
+    if (auto session = ctx.validate_session(); !session)
+    {
+        return session;
+    }
+    if (service == ServiceType::EngineerMaintenance)
+    {
+        return std::unexpected(AtmError::Unauthorized);
+    }
+    return {};
+}
 
 std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& ctx) {
     ctx.end_session();
@@ -73,8 +83,18 @@ std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& ct
 }
 
 std::expected<void, AtmError> EngineerSessionState::open_vault(
-    AtmController& /*ctx*/, std::string_view /*engineer_key*/)
-{ return {}; }
+    AtmController& ctx, std::string_view engineer_key)
+{
+    if (auto session = ctx.validate_session(); !session)
+    {
+        return session;
+    }
+    if (!ctx.verify_engineer_key(engineer_key))
+    {
+        return std::unexpected(AtmError::VaultAccessDenied);
+    }
+    return ctx.open_vault_door();
+}
 
 std::expected<void, AtmError> EngineerSessionState::eject_card(AtmController& ctx) {
     ctx.end_session();
