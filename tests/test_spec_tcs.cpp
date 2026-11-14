@@ -283,5 +283,18 @@ TEST(anti_replay)
     CHECK(chk.get_balance() == chk_after);
     CHECK(sav.get_balance() == sav_after);
     CHECK(sut.audit->size() == 1);
+
+    sut.replay->register_session("sess-1", 5);
+    CHECK(!sut.replay->validate_and_consume("sess-1", 3));
+    CHECK(!sut.replay->validate_and_consume("sess-1", 5));
+    CHECK(sut.replay->validate_and_consume("sess-1", 6));
+
+    CHECK(sut.ledger.transfer(chk, sav, 5000, "TRANSFER", 43, "req-uuid-1").has_value());
+    auto idemp_replay = sut.ledger.transfer(chk, sav, 5000, "TRANSFER", 44, "req-uuid-1");
+    CHECK(!idemp_replay.has_value());
+    CHECK(idemp_replay.error() == LedgerError::ReplayDetected);
+    CHECK(chk.get_balance() == chk_after - 5000);
+    CHECK(sav.get_balance() == sav_after + 5000);
+    CHECK(sut.audit->size() == 2);
     done();
 }
