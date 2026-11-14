@@ -16,6 +16,7 @@
 
 #include "atm_state.hpp"
 #include "auth_service.hpp"
+#include "card.hpp"
 #include "session_context.hpp"
 
 #include <memory>
@@ -42,19 +43,20 @@ public:
     AtmController& operator=(AtmController&&) = delete;
 
     void transition_to(std::unique_ptr<IAtmState> new_state);
-    void start_session(std::string_view card);
+    void start_session(CardRecord card);
     void end_session() noexcept;
-    void update_role(UserRole new_role);
 
     std::expected<void, AtmError> process_insert_card(std::string_view card);
     std::expected<void, AtmError> process_enter_pin(std::string_view pin);
     std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
-
+    
+    std::expected<CardRecord, AtmError> validate_card(std::string_view card);
     std::expected<void, AtmError> validate_active_session();
-    std::expected<UserRole, AtmError> authenticate_current_card(std::string_view card);
+    std::expected<void, AtmError> authenticate_current_card(std::string_view card);
 
     std::optional<std::string_view> get_active_session_id() const;
+    UserRole                        get_active_role()       const;
 
     std::string_view get_current_state_name() const
     { return _current_state->get_state_name(); }

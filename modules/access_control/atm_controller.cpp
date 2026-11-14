@@ -31,14 +31,15 @@ void AtmController::transition_to(std::unique_ptr<IAtmState> new_state)
     _current_state = std::move(new_state);
 }
 
-void AtmController::start_session(std::string_view card)
+void AtmController::start_session(CardRecord card)
 {
     std::unique_lock lock(_mtx);
 
     // TODO: generate session id?
     std::string session_id("example");
 
-    SessionContext session(session_id, std::string(card));
+    SessionContext session(session_id, card);
+    session.role = card.role;
     _active_session.emplace(session);
 }
 
@@ -47,8 +48,6 @@ void AtmController::end_session() noexcept
     std::unique_lock lock(_mtx);
     _active_session.reset();
 }
-
-void AtmController::update_role(UserRole new_role) { _active_session->role = new_role; }
 
 std::expected<void, AtmError> AtmController::process_insert_card(std::string_view card)
 {
@@ -61,6 +60,17 @@ std::expected<void, AtmError> AtmController::process_enter_pin(std::string_view 
     std::unique_lock lock(_mtx);
     auto result = _current_state->enter_pin(*this, pin);
     return result;
+}
+
+std::expected<CardRecord, AtmError> AtmController::validate_card(std::string_view card) {
+    std::unique_lock lock(_mtx);
+
+    auto result = _auth_service.validate_card(card);
+    if (!result) {
+        return std::unexpected(to_atm_error(result.error()));
+    }
+
+    return result.value();
 }
 
 std::expected<void, AtmError> AtmController::validate_active_session()
@@ -80,22 +90,30 @@ std::expected<void, AtmError> AtmController::validate_active_session()
     return {};
 }
 
-std::expected<UserRole, AtmError> AtmController::authenticate_current_card(
+std::expected<void, AtmError> AtmController::authenticate_current_card(
     std::string_view pin)
 {
-    auto auth_result = _auth_service.authenticate_card(_active_session->card_number, pin);
+    auto auth_result = _auth_service.authenticate_card(_active_session->record.number, pin);
     if (!auth_result.has_value())
     {
         return std::unexpected(to_atm_error(auth_result.error()));
     }
-    return auth_result.value();
+    return {};
 }
 
 std::optional<std::string_view> AtmController::get_active_session_id() const
 {
     std::unique_lock lock(_mtx);
-
+    
     if (!_active_session.has_value()) { return std::nullopt; }
     if (_active_session->is_expired(TIMEOUT)) { return std::nullopt; }
     return _active_session->session_id;
+}
+
+UserRole AtmController::get_active_role() const {
+    std::unique_lock lock(_mtx);
+    if (!_active_session.has_value() || _active_session->is_expired(TIMEOUT)) { 
+        return UserRole::None; 
+    }
+    return _active_session->role;
 }

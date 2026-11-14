@@ -16,7 +16,11 @@
 std::expected<void, AtmError> IdleState::insert_card(AtmController& ctx,
                                                      std::string_view card_number)
 {
-    ctx.start_session(card_number);
+    auto record = ctx.validate_card(card_number);
+    if (!record) {
+        return std::unexpected(record.error());
+    }
+    ctx.start_session(record.value());
     ctx.transition_to(std::make_unique<CardInsertedState>());
     return {};
 }
@@ -24,25 +28,20 @@ std::expected<void, AtmError> IdleState::insert_card(AtmController& ctx,
 std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& ctx,
                                                            std::string_view pin)
 {
-    auto role = ctx.authenticate_current_card(pin);
-    if (!role.has_value())
+    auto result = ctx.authenticate_current_card(pin);
+    if (!result)
     {
-        if (role.error() == AtmError::MaxAttemptsExceeded ||
-            role.error() == AtmError::CardBlocked)
-        {
-            ctx.end_session();
-            ctx.transition_to(std::make_unique<IdleState>());
-        }
-        return std::unexpected(role.error());
+        ctx.end_session();
+        ctx.transition_to(std::make_unique<IdleState>());
+        return std::unexpected(result.error());
     }
-    if (role.value() == UserRole::Customer)
+    auto role = ctx.get_active_role();
+    if (role == UserRole::Customer)
     {
-        ctx.update_role(UserRole::Customer);
         ctx.transition_to(std::make_unique<CustomerSessionState>());
     }
-    else if (role.value() == UserRole::Engineer)
+    else if (role == UserRole::Engineer)
     {
-        ctx.update_role(UserRole::Engineer);
         ctx.transition_to(std::make_unique<EngineerSessionState>());
     }
     else

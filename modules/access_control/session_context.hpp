@@ -24,17 +24,14 @@ class SessionContext
     using clock = std::chrono::steady_clock;
 
 public:
-    SessionContext(std::string id, std::string card_num)
-        : session_id{std::move(id)}, card_number{std::move(card_num)}
+    SessionContext(std::string id, CardRecord card)
+        : session_id{std::move(id)}, record{std::move(card)}
     { }
 
     std::string session_id;
 
-    std::string card_number;
-    UserRole role{UserRole::None};
-
-    // TODO: store CardRecord instead of separate card_number, role
-    // CardRecord record;
+    CardRecord record;
+    UserRole   role{UserRole::None};
 
     clock::time_point last_activity{clock::now()};
 
@@ -45,7 +42,7 @@ public:
 
     bool is_expired(std::chrono::seconds timeout) const noexcept
     { return (clock::now() - last_activity) >= timeout; };
-    bool is_authenticated() const noexcept { return role != UserRole::None; }
+    bool is_authenticated() const noexcept { return record.role != UserRole::None; }
 
     uint64_t next_nonce() noexcept { return ++current_nonce; };
 };
