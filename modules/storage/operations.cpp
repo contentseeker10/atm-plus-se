@@ -110,4 +110,25 @@ namespace storage
             default:          return std::unexpected(to_db_error(rc));
         }
     }
+
+    std::expected<void, DbError> block_card(sqlite3* db, std::string_view card) {
+        auto stmt = prepare(db, sql::kUpdateBlocked);
+        if (!stmt) {
+            return std::unexpected(stmt.error());
+        }
+
+        if (const int rc = sqlite3_bind_int64(stmt->get(), 1, (int)true); rc != SQLITE_OK) {
+            return std::unexpected(to_db_error(rc));
+        }
+        if (const int rc = bind_text(stmt->get(), 2, card); rc != SQLITE_OK) {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE) {
+            return std::unexpected(to_db_error(rc));
+        }
+        if (sqlite3_changes64(db) == 0) { 
+            return std::unexpected(DbError::RecordNotFound); 
+        }
+    }
 } // namespace storage

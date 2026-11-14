@@ -78,4 +78,7 @@ WHERE account_id = ?1
 
     inline constexpr std::string_view kSelectCardRecord =
         "SELECT * FROM card WHERE card_number = ?1";
+
+    inline constexpr std::string_view kUpdateBlocked =
+        "UPDATE card SET is_blocked = ?1 where card_number = ?2";
 } // namespace storage::sql

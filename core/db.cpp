@@ -91,3 +91,8 @@ std::expected<CardRecord, DbError> DatabaseManager::load_card(std::string_view c
     std::scoped_lock lock{_db_mutex};
     return storage::load_card(_db_handle.get(), card);
 }
+
+std::expected<void, DbError> DatabaseManager::block_card(std::string_view card) {
+    std::scoped_lock lock{_db_mutex};
+    return storage::block_card(_db_handle.get(), card);
+}

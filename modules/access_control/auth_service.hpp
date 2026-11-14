@@ -38,7 +38,7 @@ private:
     std::shared_ptr<AuditLog> _audit_log;
 
     std::expected<CardRecord, AuthError> _load_card(std::string_view card);
-    std::expected<void, AuthError> _block_card();
+    std::expected<void, AuthError> _block_card(std::string_view card);
 
     bool _is_card_blocked(std::string_view card) const;
     bool _is_card_expired(std::string_view card) const;

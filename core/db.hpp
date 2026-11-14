@@ -45,7 +45,7 @@ public:
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory();
 
     std::expected<CardRecord, DbError> load_card(std::string_view card);
-
+    std::expected<void, DbError>       block_card(std::string_view card);
 private:
     struct SqliteDeleter
     { void operator()(sqlite3* db) const noexcept; };

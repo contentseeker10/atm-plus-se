@@ -41,8 +41,11 @@ std::expected<CardRecord, AuthError> AuthService::_load_card(std::string_view ca
     return record.value();
 }
 
-std::expected<void, AuthError> AuthService::_block_card() {
-    // TODO: request to DB to block the card
+std::expected<void, AuthError> AuthService::_block_card(std::string_view card) {
+    auto result = _db->block_card(card);
+    if (!result) {
+        return std::unexpected(AuthError::DatabaseError);
+    }
     return {};
 }
 
