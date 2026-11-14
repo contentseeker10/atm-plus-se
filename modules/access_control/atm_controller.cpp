@@ -26,7 +26,6 @@ AtmController::~AtmController() = default;
 
 void AtmController::transition_to(std::unique_ptr<IAtmState> new_state)
 {
-    // std::unique_lock lock(_mtx); // assumed locked externally
     _current_state = std::move(new_state);
 }
 
@@ -62,6 +61,11 @@ std::expected<void, AtmError> AtmController::process_enter_pin(std::string_view 
     std::unique_lock lock(_mtx);
     auto result = _current_state->enter_pin(*this, pin);
     return result;
+}
+
+std::expected<void, AtmError> AtmController::process_eject_card() {
+    std::unique_lock lock(_mtx);
+    return _current_state->eject_card(*this);
 }
 
 std::expected<CardRecord, AtmError> AtmController::validate_card(std::string_view card) {

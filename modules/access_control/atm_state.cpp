@@ -56,19 +56,28 @@ std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& ctx,
     return {};
 }
 
-std::expected<void, AtmError> CardInsertedState::eject_card(AtmController& /*ctx*/)
-{ return {}; }
+std::expected<void, AtmError> CardInsertedState::eject_card(AtmController& ctx) {
+    ctx.end_session();
+    ctx.transition_to(std::make_unique<IdleState>());
+    return {};
+}
 
 std::expected<void, AtmError> CustomerSessionState::select_service(
     AtmController& /*ctx*/, ServiceType /*service*/)
 { return {}; }
 
-std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& /*ctx*/)
-{ return {}; }
+std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& ctx) {
+    ctx.end_session();
+    ctx.transition_to(std::make_unique<IdleState>());
+    return {};
+}
 
 std::expected<void, AtmError> EngineerSessionState::open_vault(
     AtmController& /*ctx*/, std::string_view /*engineer_key*/)
 { return {}; }
 
-std::expected<void, AtmError> EngineerSessionState::eject_card(AtmController& /*ctx*/)
-{ return {}; }
+std::expected<void, AtmError> EngineerSessionState::eject_card(AtmController& ctx) {
+    ctx.end_session();
+    ctx.transition_to(std::make_unique<IdleState>());
+    return {};
+}
