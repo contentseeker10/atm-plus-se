@@ -70,6 +70,17 @@ std::expected<void, AuthError> AuthService::_block_card(std::string_view card) {
     if (!result) {
         return std::unexpected(to_auth_error(result.error()));
     }
+    if (_audit_log) {
+        LedgerEntry entry;
+        entry.debit_account_id = std::string(card);
+        entry.credit_account_id = "SECURITY_AUDIT";
+        entry.amount_cents = 1;
+        entry.operation_type = "CARD_BLOCKED";
+        auto audit_res = _audit_log->append_record(entry);
+        if (!audit_res) {
+            return std::unexpected(AuthError::DatabaseError);
+        }
+    }
     return {};
 }
 
