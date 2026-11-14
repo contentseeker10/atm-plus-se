@@ -12,6 +12,8 @@
 
 #include "atm_controller.hpp"
 
+#include "crypto.hpp"
+
 #include "cash/cash_vault.hpp"
 
 constexpr std::chrono::seconds TIMEOUT = 60s;
@@ -34,12 +36,8 @@ void AtmController::transition_to(std::unique_ptr<IAtmState> new_state)
 void AtmController::start_session(CardRecord card)
 {
     std::unique_lock lock(_mtx);
-
-    // TODO: generate session id?
-    std::string session_id("example");
-
+    auto session_id = crypto::generate_uuid_v4();
     SessionContext session(session_id, card);
-    session.role = card.role;
     _active_session.emplace(session);
 }
 
@@ -84,6 +82,7 @@ std::expected<void, AtmError> AtmController::validate_active_session()
     if (_active_session->is_expired(TIMEOUT))
     {
         end_session();
+        transition_to(std::make_unique<IdleState>());
         return std::unexpected(AtmError::SessionExpired);
     }
     _active_session->touch();
@@ -101,7 +100,7 @@ std::expected<void, AtmError> AtmController::authenticate_current_card(
     return {};
 }
 
-std::optional<std::string_view> AtmController::get_active_session_id() const
+std::optional<std::string> AtmController::get_active_session_id() const
 {
     std::unique_lock lock(_mtx);
     
@@ -115,5 +114,5 @@ UserRole AtmController::get_active_role() const {
     if (!_active_session.has_value() || _active_session->is_expired(TIMEOUT)) { 
         return UserRole::None; 
     }
-    return _active_session->role;
+    return _active_session->record.role;
 }

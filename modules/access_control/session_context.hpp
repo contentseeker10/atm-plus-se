@@ -31,7 +31,6 @@ public:
     std::string session_id;
 
     CardRecord record;
-    UserRole   role{UserRole::None};
 
     clock::time_point last_activity{clock::now()};
 

@@ -55,8 +55,8 @@ public:
     std::expected<void, AtmError> validate_active_session();
     std::expected<void, AtmError> authenticate_current_card(std::string_view card);
 
-    std::optional<std::string_view> get_active_session_id() const;
-    UserRole                        get_active_role()       const;
+    std::optional<std::string> get_active_session_id() const;
+    UserRole                   get_active_role()       const;
 
     std::string_view get_current_state_name() const
     { return _current_state->get_state_name(); }
