@@ -25,6 +25,7 @@ struct sqlite3;
 
 class Account;
 class Cassette;
+struct CardRecord;
 
 namespace storage
 {
@@ -48,4 +49,10 @@ namespace storage
 
     std::expected<CardAccounts, DbError> load_card_accounts(sqlite3* db,
                                                             std::string_view card_number);
+
+    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card);
+    std::expected<CardRecord, DbError> load_card_limited(sqlite3* db, std::string_view card);
+    std::expected<void, DbError> block_card(sqlite3* db, std::string_view card);
+    std::expected<int, DbError> get_failed_attempts(sqlite3* db, std::string_view card);
+    std::expected<void, DbError> set_failed_attempts(sqlite3* db, std::string_view card, int amount);
 } // namespace storage

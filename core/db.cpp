@@ -12,7 +12,10 @@
 
 #include "db.hpp"
 
+#include "access_control/card.hpp"
+
 #include "accounts/account.hpp"
+
 #include "storage/operations.hpp"
 #include "storage/sql.hpp"
 #include "storage/sqlite_utils.hpp"
@@ -82,4 +85,24 @@ std::expected<std::map<Denomination, int>, DbError> DatabaseManager::
 {
     std::scoped_lock lock{_db_mutex};
     return storage::load_vault_inventory(_db_handle.get());
+}
+
+std::expected<CardRecord, DbError> DatabaseManager::load_card(std::string_view card, bool validate_only) {
+    std::scoped_lock lock{_db_mutex};
+    return validate_only ? storage::load_card_limited(_db_handle.get(), card) : storage::load_card(_db_handle.get(), card);
+}
+
+std::expected<void, DbError> DatabaseManager::block_card(std::string_view card) {
+    std::scoped_lock lock{_db_mutex};
+    return storage::block_card(_db_handle.get(), card);
+}
+
+std::expected<int, DbError> DatabaseManager::get_failed_attempts(std::string_view card) {
+    std::scoped_lock lock{_db_mutex};
+    return storage::get_failed_attempts(_db_handle.get(), card);
+}
+
+std::expected<void, DbError> DatabaseManager::set_failed_attempts(std::string_view card, int amount) {
+    std::scoped_lock lock{_db_mutex};
+    return storage::set_failed_attempts(_db_handle.get(), card, amount);
 }

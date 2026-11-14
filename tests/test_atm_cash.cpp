@@ -97,14 +97,15 @@ INSERT INTO vault_cassettes (denomination_cents, bill_count, capacity) VALUES {4
 
             atm = std::make_unique<AtmController>(
                 std::make_unique<CashVault>(std::move(cassette_map)), db, audit,
-                AuthService{db, audit}, ledger);
+                std::make_unique<AuthService>(db, audit), ledger);
         }
 
         void login(std::string_view card, UserRole role)
         {
             atm->end_session();
-            atm->start_session(card);
-            atm->update_role(role);
+            CardRecord record{std::string(card), false, false};
+            record.role = role;
+            atm->start_session(record);
         }
 
         std::int64_t balance(std::string_view account_id)

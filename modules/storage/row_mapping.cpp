@@ -14,6 +14,8 @@
 
 #include "sqlite_utils.hpp"
 
+#include "access_control/card.hpp"
+
 #include "accounts/checking_account.hpp"
 #include "accounts/savings_account.hpp"
 
@@ -68,5 +70,35 @@ namespace storage
         case Denomination::D_500: return denomination;
         }
         return std::nullopt;
+    }
+
+    std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row) {
+        auto card_number = column_text(row, 0);
+        auto card_holder = column_text(row, 1);
+        auto pin = column_text(row, 2);
+        auto sal = column_text(row, 3);
+        auto account = column_optional_text(row, 4);
+
+        auto role = UserRole::None;
+        switch (const int role_int = static_cast<int>(sqlite3_column_int64(row, 5))) {
+            case 0: role = UserRole::Customer; break;
+            case 1: role = UserRole::Engineer; break;
+            default: return std::unexpected(DbError::ConstraintViolation);
+        }
+
+        auto blocked = sqlite3_column_int64(row, 6) != 0;
+        auto expired = sqlite3_column_int64(row, 7) != 0;
+        auto failed_atmps = static_cast<int>(sqlite3_column_int64(row, 8));
+
+        CardRecord record(card_number, card_holder, pin, sal, account, role, blocked, expired, failed_atmps);
+        return record;
+    }
+
+    std::expected<CardRecord, DbError> read_card_limited(sqlite3_stmt* row) {
+        auto card_number = column_text(row, 0);
+        auto blocked = sqlite3_column_int64(row, 1) != 0;
+        auto expired = sqlite3_column_int64(row, 2) != 0;
+        CardRecord record(card_number, blocked, expired);
+        return record;
     }
 } // namespace storage

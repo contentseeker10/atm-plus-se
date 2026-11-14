@@ -78,14 +78,14 @@ constexpr AtmError to_atm_error(AuthError err) noexcept
 {
     switch (err)
     {
-    case AuthError::CardNotFound: return AtmError::CardNotFound;
-    case AuthError::CardBlocked: return AtmError::CardBlocked;
-    case AuthError::InvalidPin: return AtmError::InvalidPin;
-    case AuthError::MaxAttemptsExceeded: return AtmError::MaxAttemptsExceeded;
-    case AuthError::CardExpired: return AtmError::CardExpired;
+    case AuthError::CardNotFound:             return AtmError::CardNotFound;
+    case AuthError::CardBlocked:              return AtmError::CardBlocked;
+    case AuthError::InvalidPin:               return AtmError::InvalidPin;
+    case AuthError::MaxAttemptsExceeded:      return AtmError::MaxAttemptsExceeded;
+    case AuthError::CardExpired:              return AtmError::CardExpired;
     case AuthError::CryptoVerificationFailed: return AtmError::CryptoVerificationFailed;
-    case AuthError::DatabaseError: return AtmError::DatabaseError;
-    default: return AtmError::Unauthorized;
+    case AuthError::DatabaseError:            return AtmError::DatabaseError;
+    default:                                  return AtmError::Unauthorized;
     }
 }
 
@@ -98,6 +98,19 @@ enum class DbError
     TransactionFailed,
     Busy
 };
+
+constexpr AuthError to_auth_error(DbError err) noexcept {
+    switch (err)
+    {
+        case DbError::ConnectionFailed:    return AuthError::DatabaseError;
+        case DbError::QueryFailed:         return AuthError::DatabaseError;
+        case DbError::RecordNotFound:      return AuthError::CardNotFound;
+        case DbError::ConstraintViolation: return AuthError::DatabaseError;
+        case DbError::TransactionFailed:   return AuthError::DatabaseError;
+        case DbError::Busy:                return AuthError::DatabaseError;
+        default:                           return AuthError::DatabaseError;
+    }
+}
 
 enum class CryptoError
 {

@@ -88,4 +88,26 @@ FROM cards AS c
 JOIN accounts AS a ON a.account_id = c.checking_account_id
 WHERE c.card_number = ?1
 )sql";
+
+    inline constexpr std::string_view kSelectLimitedCardRecord = R"sql(
+SELECT card_number, is_blocked, is_expired
+FROM cards
+WHERE card_number = ?1
+)sql";
+
+    inline constexpr std::string_view kSelectCardRecord = R"sql(
+SELECT card_number, card_holder, pin_hash, salt, checking_account_id,
+       role, is_blocked, is_expired, failed_attempts
+FROM cards
+WHERE card_number = ?1
+)sql";
+
+    inline constexpr std::string_view kUpdateBlocked =
+        "UPDATE cards SET is_blocked = ?1 WHERE card_number = ?2";
+
+    inline constexpr std::string_view kSelectAttempts =
+        "SELECT failed_attempts FROM cards WHERE card_number = ?1";
+
+    inline constexpr std::string_view kUpdateAttempts =
+        "UPDATE cards SET failed_attempts = ?1 WHERE card_number = ?2";
 } // namespace storage::sql
