@@ -110,4 +110,31 @@ WHERE card_number = ?1
 
     inline constexpr std::string_view kUpdateAttempts =
         "UPDATE cards SET failed_attempts = ?1 WHERE card_number = ?2";
+
+    inline constexpr std::string_view kInsertSavingsSeed = R"sql(
+INSERT INTO accounts (account_id, client_id, type, balance_cents,
+                      annual_interest_rate, minimum_balance_cents)
+VALUES (?1, ?2, 'savings', ?3, ?4, ?5)
+ON CONFLICT DO NOTHING
+)sql";
+
+    inline constexpr std::string_view kInsertCheckingSeed = R"sql(
+INSERT INTO accounts (account_id, client_id, type, balance_cents,
+                      client_min_cents, overflow_max_cents, linked_savings_id)
+VALUES (?1, ?2, 'checking', ?3, ?4, ?5, ?6)
+ON CONFLICT DO NOTHING
+)sql";
+
+    inline constexpr std::string_view kInsertCardSeed = R"sql(
+INSERT INTO cards (card_number, card_holder, pin_hash, salt, role,
+                   is_blocked, is_expired, failed_attempts, checking_account_id)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+ON CONFLICT DO NOTHING
+)sql";
+
+    inline constexpr std::string_view kInsertCassetteSeed = R"sql(
+INSERT INTO vault_cassettes (denomination_cents, bill_count, capacity)
+VALUES (?1, ?2, ?3)
+ON CONFLICT DO NOTHING
+)sql";
 } // namespace storage::sql

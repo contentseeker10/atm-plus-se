@@ -56,6 +56,7 @@ add_executable(AtmPlusSe
     modules/storage/operations.cpp
     modules/storage/row_mapping.cpp
     modules/storage/sqlite_utils.cpp
+    modules/storage/seed.cpp
     modules/storage/transaction.cpp
 
     modules/accounting/ledger_service.cpp
@@ -78,6 +79,7 @@ add_executable(atm_tests
     tests/test_aps.cpp
     tests/test_ledger_persistence.cpp
     tests/test_atm_cash.cpp
+    tests/test_seed.cpp
 
     modules/access_control/atm_controller.cpp
     modules/access_control/atm_state.cpp
@@ -101,6 +103,7 @@ add_executable(atm_tests
     modules/storage/operations.cpp
     modules/storage/row_mapping.cpp
     modules/storage/sqlite_utils.cpp
+    modules/storage/seed.cpp
     modules/storage/transaction.cpp
 
     core/crypto.cpp
