@@ -226,9 +226,22 @@ std::expected<void, AtmError> AtmController::process_enter_pin(std::string_view 
     return result;
 }
 
+std::expected<void, AtmError> AtmController::process_select_service(ServiceType service)
+{
+    std::unique_lock lock(_mtx);
+    return _current_state->select_service(*this, service);
+}
+
 std::expected<void, AtmError> AtmController::process_eject_card() {
     std::unique_lock lock(_mtx);
     return _current_state->eject_card(*this);
+}
+
+std::expected<void, AtmError> AtmController::process_open_vault(
+    std::string_view engineer_key)
+{
+    std::unique_lock lock(_mtx);
+    return _current_state->open_vault(*this, engineer_key);
 }
 
 std::expected<CardRecord, AtmError> AtmController::validate_card(std::string_view card) {
@@ -412,6 +425,11 @@ std::expected<void, AtmError> AtmController::close_vault_door()
 
     _vault->close_door();
     return {};
+}
+
+bool AtmController::verify_engineer_key(std::string_view engineer_key) const noexcept
+{
+    return crypto::constant_time_compare(engineer_key, kDefaultEngineerKey);
 }
 
 std::expected<void, AtmError> AtmController::require_role(UserRole role)

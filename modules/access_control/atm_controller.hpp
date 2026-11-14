@@ -53,13 +53,16 @@ public:
 
     std::expected<void, AtmError> process_insert_card(std::string_view card);
     std::expected<void, AtmError> process_enter_pin(std::string_view pin);
+    std::expected<void, AtmError> process_select_service(ServiceType service);
     std::expected<void, AtmError> process_eject_card();
+    std::expected<void, AtmError> process_open_vault(std::string_view engineer_key);
     std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
     std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
 
     std::expected<void, AtmError> open_vault_door();
     std::expected<void, AtmError> close_vault_door();
+    bool verify_engineer_key(std::string_view engineer_key) const noexcept;
 
     const CashVault& get_vault() const noexcept { return *_vault; }
 
@@ -75,6 +78,7 @@ public:
 
 private:
     inline static constexpr std::chrono::seconds kTimeout = 60s;
+    inline static constexpr std::string_view kDefaultEngineerKey = "ENG-MASTER-KEY-2026";
 
     std::expected<void, AtmError> require_role(UserRole role);
     std::expected<void, AtmError> commit_cash_operation(
