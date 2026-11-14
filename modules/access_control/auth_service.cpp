@@ -18,10 +18,13 @@
 
 std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view card) {
     auto record = _load_card(card);
-    if (_is_card_blocked(card)) {
+    if (!record) {
+        return std::unexpected(record.error());
+    }
+    if (_is_card_blocked(record.value())) {
         return std::unexpected(AuthError::CardBlocked);
     }
-    if (_is_card_expired(card)) {
+    if (_is_card_expired(record.value())) {
         return std::unexpected(AuthError::CardExpired);
     }
     return record.value();
@@ -29,7 +32,16 @@ std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view
 
 std::expected<void, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
     auto record = _load_card(card);
-    auto hash = crypto::sha256_hex(pin);
+    if (!record) {
+        return std::unexpected(record.error());
+    }
+    if (_is_card_blocked(record.value())) {
+        return std::unexpected(AuthError::CardBlocked);
+    }
+    if (_is_card_expired(record.value())) {
+        return std::unexpected(AuthError::CardExpired);
+    }
+    auto hash = crypto::sha256_hex(pin, record->salt);
     if (!crypto::constant_time_compare(hash, record->pin_hash)) {
         auto inc_failed = _inc_failed_attempts(card);
         if (!inc_failed) {
@@ -41,13 +53,17 @@ std::expected<void, AuthError> AuthService::authenticate_card(std::string_view c
         }
         return std::unexpected(AuthError::InvalidPin);
     }
+    auto reset = _reset_failed_attempts(card);
+    if (!reset) {
+        return std::unexpected(reset.error());
+    }
     return {};
 }
 
 std::expected<CardRecord, AuthError> AuthService::_load_card(std::string_view card) {
     auto record = _db->load_card(card);
     if (!record) {
-        return std::unexpected(AuthError::DatabaseError);
+        return std::unexpected(to_auth_error(record.error()));
     }
     return record.value();
 }
@@ -55,7 +71,7 @@ std::expected<CardRecord, AuthError> AuthService::_load_card(std::string_view ca
 std::expected<void, AuthError> AuthService::_block_card(std::string_view card) {
     auto result = _db->block_card(card);
     if (!result) {
-        return std::unexpected(AuthError::DatabaseError);
+        return std::unexpected(to_auth_error(result.error()));
     }
     return {};
 }
@@ -63,7 +79,7 @@ std::expected<void, AuthError> AuthService::_block_card(std::string_view card) {
 std::expected<int, AuthError> AuthService::_inc_failed_attempts(std::string_view card) {
     auto current_failed = _db->get_failed_attempts(card);
     if (!current_failed) {
-        return std::unexpected(AuthError::DatabaseError);
+        return std::unexpected(to_auth_error(current_failed.error()));
     }
 
     auto attempts = current_failed.value();
@@ -72,21 +88,17 @@ std::expected<int, AuthError> AuthService::_inc_failed_attempts(std::string_view
         return std::unexpected(AuthError::MaxAttemptsExceeded);
     }
 
-    _db->set_failed_attempts(card, ++attempts);
+    auto result = _db->set_failed_attempts(card, ++attempts);
+    if (!result) {
+        return std::unexpected(to_auth_error(result.error()));
+    }
     return attempts;
 }
 
-bool AuthService::_is_card_blocked(std::string_view card) const {
-    auto record = _db->load_card(card);
-    return record->is_blocked;
-}
-
-bool AuthService::_is_card_expired(std::string_view card) const {
-    auto record = _db->load_card(card);
-    return record->is_expired;
-}
-
-int AuthService::_get_failed_attempts(std::string_view card) const {
-    auto record = _db->load_card(card);
-    return record->failed_attempts;
+std::expected<void, AuthError> AuthService::_reset_failed_attempts(std::string_view card) {
+    auto result = _db->set_failed_attempts(card, 0);
+    if (!result) {
+        return std::unexpected(to_auth_error(result.error()));
+    }
+    return {};
 }
