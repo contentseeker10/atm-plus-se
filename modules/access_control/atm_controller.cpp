@@ -92,6 +92,17 @@ std::expected<void, AtmError> AtmController::validate_active_session()
 std::expected<void, AtmError> AtmController::authenticate_current_card(
     std::string_view pin)
 {
+    std::unique_lock lock(_mtx);
+
+    if (!_active_session.has_value()) {
+        return std::unexpected(AtmError::NoActiveSession);
+    }
+
+    auto validate_session = validate_active_session();
+    if (!validate_session) {
+        return std::unexpected(validate_session.error());
+    }
+
     auto auth_result = _auth_service.authenticate_card(_active_session->record.number, pin);
     if (!auth_result.has_value())
     {

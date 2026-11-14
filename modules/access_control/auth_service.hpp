@@ -43,7 +43,7 @@ private:
     std::expected<int, AuthError>        _inc_failed_attempts(std::string_view card);
     std::expected<void, AuthError>       _reset_failed_attempts(std::string_view card);
 
-    bool _is_card_blocked(CardRecord card)    const { return card.is_blocked; }
-    bool _is_card_expired(CardRecord card)    const { return card.is_expired; }
-    int _get_failed_attempts(CardRecord card) const { return card.failed_attempts; }
+    bool _is_card_blocked(const CardRecord& card)    const { return card.is_blocked; }
+    bool _is_card_expired(const CardRecord& card)    const { return card.is_expired; }
+    int _get_failed_attempts(const CardRecord& card) const { return card.failed_attempts; }
 };

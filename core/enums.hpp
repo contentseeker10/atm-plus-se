@@ -65,12 +65,7 @@ enum class AtmError
     DatabaseError,
     
     // DB specific
-    ConnectionFailed,
-    QueryFailed,
-    RecordNotFound,
-    ConstraintViolation,
-    TransactionFailed,
-    Busy
+    DatabaseError
 };
 
 enum class AuthError
@@ -81,14 +76,8 @@ enum class AuthError
     MaxAttemptsExceeded,
     CardExpired,
     CryptoVerificationFailed,
-    DatabaseError,
 
-    ConnectionFailed,
-    QueryFailed,
-    RecordNotFound,
-    ConstraintViolation,
-    TransactionFailed,
-    Busy
+    DatabaseError,
 };
 
 constexpr AtmError to_atm_error(AuthError err) noexcept
@@ -101,12 +90,6 @@ constexpr AtmError to_atm_error(AuthError err) noexcept
     case AuthError::MaxAttemptsExceeded:      return AtmError::MaxAttemptsExceeded;
     case AuthError::CardExpired:              return AtmError::CardExpired;
     case AuthError::CryptoVerificationFailed: return AtmError::CryptoVerificationFailed;
-    case AuthError::ConnectionFailed:         return AtmError::ConnectionFailed;
-    case AuthError::QueryFailed:              return AtmError::QueryFailed;
-    case AuthError::RecordNotFound:           return AtmError::RecordNotFound;
-    case AuthError::ConstraintViolation:      return AtmError::ConstraintViolation;
-    case AuthError::TransactionFailed:        return AtmError::TransactionFailed;
-    case AuthError::Busy:                     return AtmError::Busy;
     case AuthError::DatabaseError:            return AtmError::DatabaseError;
     default:                                  return AtmError::Unauthorized;
     }
@@ -125,12 +108,12 @@ enum class DbError
 constexpr AuthError to_auth_error(DbError err) noexcept {
     switch (err)
     {
-        case DbError::ConnectionFailed:    return AuthError::ConnectionFailed;
-        case DbError::QueryFailed:         return AuthError::QueryFailed;
-        case DbError::RecordNotFound:      return AuthError::RecordNotFound;
-        case DbError::ConstraintViolation: return AuthError::ConstraintViolation;
-        case DbError::TransactionFailed:   return AuthError::TransactionFailed;
-        case DbError::Busy:                return AuthError::Busy;
+        case DbError::ConnectionFailed:    return AuthError::DatabaseError;
+        case DbError::QueryFailed:         return AuthError::DatabaseError;
+        case DbError::RecordNotFound:      return AuthError::CardNotFound;
+        case DbError::ConstraintViolation: return AuthError::DatabaseError;
+        case DbError::TransactionFailed:   return AuthError::DatabaseError;
+        case DbError::Busy:                return AuthError::DatabaseError;
         default:                           return AuthError::DatabaseError;
     }
 }

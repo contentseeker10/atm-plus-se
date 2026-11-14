@@ -83,11 +83,11 @@ namespace storage
         switch (const int role_int = sqlite3_column_int64(row, 5)) {
             case 0: role = UserRole::Customer; break;
             case 1: role = UserRole::Engineer; break;
-            case 2: return std::unexpected(DbError::ConstraintViolation);
+            default: return std::unexpected(DbError::ConstraintViolation);
         }
 
-        auto blocked = sqlite3_column_int64(row, 6);
-        auto expired = sqlite3_column_int64(row, 7);
+        auto blocked = sqlite3_column_int64(row, 6) != 0;
+        auto expired = sqlite3_column_int64(row, 7) != 0;
         auto failed_atmps = sqlite3_column_int64(row, 8);
 
         CardRecord record(card_name, card_holder, pin, sal, account, role, blocked, expired, failed_atmps);

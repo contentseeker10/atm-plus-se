@@ -31,24 +31,18 @@ std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view
 }
 
 std::expected<void, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
-    auto record = _load_card(card);
-    if (!record) {
-        return std::unexpected(record.error());
-    }
-    if (_is_card_blocked(record.value())) {
-        return std::unexpected(AuthError::CardBlocked);
-    }
-    if (_is_card_expired(record.value())) {
-        return std::unexpected(AuthError::CardExpired);
-    }
+    auto record = validate_card(card);
     auto hash = crypto::sha256_hex(pin, record->salt);
     if (!crypto::constant_time_compare(hash, record->pin_hash)) {
         auto inc_failed = _inc_failed_attempts(card);
         if (!inc_failed) {
             return std::unexpected(inc_failed.error());
         }
-        if (inc_failed.value() >= 3) {
-            _block_card(card);
+        if (inc_failed.value() >= kMaxFailedAttempts) {
+            auto block_result = _block_card(card);
+            if (!block_result) {
+                return std::unexpected(block_result.error());
+            }
             return std::unexpected(AuthError::MaxAttemptsExceeded);
         }
         return std::unexpected(AuthError::InvalidPin);
@@ -84,7 +78,7 @@ std::expected<int, AuthError> AuthService::_inc_failed_attempts(std::string_view
 
     auto attempts = current_failed.value();
 
-    if (attempts > 3) {
+    if (attempts == kMaxFailedAttempts) {
         return std::unexpected(AuthError::MaxAttemptsExceeded);
     }
 
