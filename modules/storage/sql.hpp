@@ -77,7 +77,7 @@ WHERE account_id = ?1
         "SELECT denomination_cents, bill_count FROM vault_cassettes";
 
     inline constexpr std::string_view kSelectCardRecord =
-        "SELECT * FROM card WHERE card_number = ?1";
+        "SELECT * FROM cards WHERE card_number = ?1";
 
     inline constexpr std::string_view kUpdateBlocked =
         "UPDATE cards SET is_blocked = ?1 WHERE card_number = ?2";

@@ -145,7 +145,7 @@ namespace storage
         }
 
         switch (const int rc = sqlite3_step(stmt->get())) {
-            case SQLITE_ROW:  return sqlite3_column_int64(stmt->get(), 1);
+            case SQLITE_ROW:  return sqlite3_column_int64(stmt->get(), 0);
             case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
             default:          return std::unexpected(to_db_error(rc));
         }

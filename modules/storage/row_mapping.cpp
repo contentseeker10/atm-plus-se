@@ -73,22 +73,22 @@ namespace storage
     }
 
     std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row) {
-        auto card_name = column_text(row, 1);
-        auto card_holder = column_text(row, 2);
-        auto pin = column_text(row, 3);
-        auto sal = column_text(row, 4);
-        auto account = column_optional_text(row, 5);
+        auto card_name = column_text(row, 0);
+        auto card_holder = column_text(row, 1);
+        auto pin = column_text(row, 2);
+        auto sal = column_text(row, 3);
+        auto account = column_optional_text(row, 4);
 
         auto role = UserRole::None;
-        switch (const int role_int = sqlite3_column_int64(row, 6)) {
-            case 0: return std::unexpected(DbError::ConstraintViolation);
-            case 1: role = UserRole::Customer;
-            case 2: role = UserRole::Engineer;
+        switch (const int role_int = sqlite3_column_int64(row, 5)) {
+            case 0: role = UserRole::Customer; break;
+            case 1: role = UserRole::Engineer; break;
+            case 2: return std::unexpected(DbError::ConstraintViolation);
         }
 
-        auto blocked = sqlite3_column_int64(row, 7);
-        auto expired = sqlite3_column_int64(row, 8);
-        auto failed_atmps = sqlite3_column_int64(row, 9);
+        auto blocked = sqlite3_column_int64(row, 6);
+        auto expired = sqlite3_column_int64(row, 7);
+        auto failed_atmps = sqlite3_column_int64(row, 8);
 
         CardRecord record(card_name, card_holder, pin, sal, account, role, blocked, expired, failed_atmps);
         return record;
