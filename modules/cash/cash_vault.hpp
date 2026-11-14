@@ -33,6 +33,8 @@ public:
 
     std::expected<void, VaultError> deposit_bills(const std::vector<Denomination>& bills);
 
+    std::expected<void, VaultError> replenish(Denomination denomination, int count);
+
     std::int64_t get_total_cash_cents() const noexcept;
 
     const std::map<Denomination, Cassette>& get_cassettes() const noexcept;

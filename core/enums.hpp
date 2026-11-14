@@ -39,8 +39,7 @@ enum class Denomination
 };
 
 enum class AtmError
-{   
-    // ATM specific
+{
     InvalidStateTransition,
     NoActiveSession,
     SessionExpired,
@@ -54,17 +53,14 @@ enum class AtmError
     InvalidAmount,
     CassetteFull,
     VaultDoorOpen,
-
-    // Auth specific
     CardNotFound,
     CardBlocked,
     InvalidPin,
     MaxAttemptsExceeded,
     CardExpired,
     CryptoVerificationFailed,
-    
-    // DB specific
-    DatabaseError
+    DatabaseError,
+    InsufficientFunds
 };
 
 enum class AuthError
@@ -75,8 +71,7 @@ enum class AuthError
     MaxAttemptsExceeded,
     CardExpired,
     CryptoVerificationFailed,
-
-    DatabaseError,
+    DatabaseError
 };
 
 constexpr AtmError to_atm_error(AuthError err) noexcept

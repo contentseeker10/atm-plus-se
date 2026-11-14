@@ -76,22 +76,36 @@ WHERE account_id = ?1
     inline constexpr std::string_view kSelectInventory =
         "SELECT denomination_cents, bill_count FROM vault_cassettes";
 
+    inline constexpr std::string_view kSelectCassettes =
+        "SELECT denomination_cents, bill_count, capacity FROM vault_cassettes";
+
+    inline constexpr std::string_view kUpdateCassetteCount =
+        "UPDATE vault_cassettes SET bill_count = ?1 WHERE denomination_cents = ?2";
+
+    inline constexpr std::string_view kSelectCardAccounts = R"sql(
+SELECT a.account_id, a.linked_savings_id
+FROM cards AS c
+JOIN accounts AS a ON a.account_id = c.checking_account_id
+WHERE c.card_number = ?1
+)sql";
+
     inline constexpr std::string_view kSelectLimitedCardRecord = R"sql(
-        SELECT card_number, is_blocked, is_expired 
-        FROM cards 
-        WHERE card_number = ?1
-    )sql";
+SELECT card_number, is_blocked, is_expired
+FROM cards
+WHERE card_number = ?1
+)sql";
+
     inline constexpr std::string_view kSelectCardRecord = R"sql(
-        SELECT card_number, card_holder, pin_hash, salt, checking_account_id, 
-                role, is_blocked, is_expired, failed_attempts 
-        FROM cards 
-        WHERE card_number = ?1
-    )sql";
+SELECT card_number, card_holder, pin_hash, salt, checking_account_id,
+       role, is_blocked, is_expired, failed_attempts
+FROM cards
+WHERE card_number = ?1
+)sql";
 
     inline constexpr std::string_view kUpdateBlocked =
         "UPDATE cards SET is_blocked = ?1 WHERE card_number = ?2";
-    
-    inline constexpr std::string_view kSelectAttempts = 
+
+    inline constexpr std::string_view kSelectAttempts =
         "SELECT failed_attempts FROM cards WHERE card_number = ?1";
 
     inline constexpr std::string_view kUpdateAttempts =

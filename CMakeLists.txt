@@ -27,6 +27,7 @@ add_executable(AtmPlusSe
     modules/access_control/atm_controller.cpp
     modules/access_control/atm_state.cpp
     modules/access_control/auth_service.cpp
+    modules/access_control/card.cpp
     modules/access_control/session_context.cpp
     
     modules/cash/cash_vault.cpp
@@ -66,6 +67,16 @@ add_executable(atm_tests
     tests/test_spec_tcs.cpp
     tests/test_aps.cpp
     tests/test_ledger_persistence.cpp
+    tests/test_atm_cash.cpp
+
+    modules/access_control/atm_controller.cpp
+    modules/access_control/atm_state.cpp
+    modules/access_control/auth_service.cpp
+    modules/access_control/card.cpp
+    modules/access_control/session_context.cpp
+
+    modules/cash/cash_vault.cpp
+    modules/cash/cassette.cpp
 
     modules/accounting/ledger.cpp
     modules/accounting/audit.cpp
