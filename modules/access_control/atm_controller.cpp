@@ -16,12 +16,9 @@
 
 #include "cash/cash_vault.hpp"
 
-constexpr std::chrono::seconds TIMEOUT = 60s;
-constexpr size_t MAX_ATTEMPTS = 3;
-
 AtmController::AtmController(std::unique_ptr<CashVault> vault,
                              std::shared_ptr<DatabaseManager> db,
-                             std::shared_ptr<AuditLog> log, AuthService auth)
+                             std::shared_ptr<AuditLog> log, std::unique_ptr<AuthService> auth)
     : _vault{std::move(vault)}, _db{std::move(db)}, _audit_log{std::move(log)},
       _auth_service{std::move(auth)}
 { }
@@ -33,7 +30,7 @@ void AtmController::transition_to(std::unique_ptr<IAtmState> new_state)
     _current_state = std::move(new_state);
 }
 
-void AtmController::start_session(CardRecord card)
+void AtmController::start_session(const CardRecord& card)
 {
     std::unique_lock lock(_mtx);
     auto session_id = crypto::generate_uuid_v4();
@@ -63,7 +60,7 @@ std::expected<void, AtmError> AtmController::process_enter_pin(std::string_view 
 std::expected<CardRecord, AtmError> AtmController::validate_card(std::string_view card) {
     std::unique_lock lock(_mtx);
 
-    auto result = _auth_service.validate_card(card);
+    auto result = _auth_service->validate_card(card);
     if (!result) {
         return std::unexpected(to_atm_error(result.error()));
     }
@@ -79,7 +76,7 @@ std::expected<void, AtmError> AtmController::validate_active_session()
     {
         return std::unexpected(AtmError::NoActiveSession);
     }
-    if (_active_session->is_expired(TIMEOUT))
+    if (_active_session->is_expired(kTimeout))
     {
         end_session();
         transition_to(std::make_unique<IdleState>());
@@ -103,7 +100,7 @@ std::expected<void, AtmError> AtmController::authenticate_current_card(
         return std::unexpected(validate_session.error());
     }
 
-    auto auth_result = _auth_service.authenticate_card(_active_session->record.number, pin);
+    auto auth_result = _auth_service->authenticate_card(_active_session->record.number, pin);
     if (!auth_result.has_value())
     {
         return std::unexpected(to_atm_error(auth_result.error()));
@@ -116,13 +113,13 @@ std::optional<std::string> AtmController::get_active_session_id() const
     std::unique_lock lock(_mtx);
     
     if (!_active_session.has_value()) { return std::nullopt; }
-    if (_active_session->is_expired(TIMEOUT)) { return std::nullopt; }
+    if (_active_session->is_expired(kTimeout)) { return std::nullopt; }
     return _active_session->session_id;
 }
 
 UserRole AtmController::get_active_role() const {
     std::unique_lock lock(_mtx);
-    if (!_active_session.has_value() || _active_session->is_expired(TIMEOUT)) { 
+    if (!_active_session.has_value() || _active_session->is_expired(kTimeout)) { 
         return UserRole::None; 
     }
     return _active_session->record.role;

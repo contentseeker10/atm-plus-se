@@ -62,7 +62,6 @@ enum class AtmError
     MaxAttemptsExceeded,
     CardExpired,
     CryptoVerificationFailed,
-    DatabaseError,
     
     // DB specific
     DatabaseError

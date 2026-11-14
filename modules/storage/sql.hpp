@@ -76,6 +76,12 @@ WHERE account_id = ?1
     inline constexpr std::string_view kSelectInventory =
         "SELECT denomination_cents, bill_count FROM vault_cassettes";
 
+    inline constexpr std::string_view kSelectLimitedCardRecord = R"sql(
+        SELECT card_number, card_holder, pin_hash, salt, 
+                is_blocked, is_expired, failed_attempts 
+        FROM cards 
+        WHERE card_number = ?1
+    )sql";
     inline constexpr std::string_view kSelectCardRecord = R"sql(
         SELECT card_number, card_holder, pin_hash, salt, checking_account_id, 
                 role, is_blocked, is_expired, failed_attempts 

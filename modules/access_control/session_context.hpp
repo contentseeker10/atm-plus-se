@@ -28,20 +28,15 @@ public:
         : session_id{std::move(id)}, record{std::move(card)}
     { }
 
-    std::string session_id;
-
-    CardRecord record;
-
+    std::string       session_id;
+    CardRecord        record;
     clock::time_point last_activity{clock::now()};
+    uint64_t          current_nonce{};
 
-    uint64_t current_nonce{};
-
-public:
     void touch() noexcept { last_activity = clock::now(); }
 
-    bool is_expired(std::chrono::seconds timeout) const noexcept
-    { return (clock::now() - last_activity) >= timeout; };
-    bool is_authenticated() const noexcept { return record.role != UserRole::None; }
+    bool is_expired(std::chrono::seconds timeout) const noexcept { return (clock::now() - last_activity) >= timeout; };
+    bool is_authenticated()                       const noexcept { return record.role != UserRole::None; }
 
     uint64_t next_nonce() noexcept { return ++current_nonce; };
 };

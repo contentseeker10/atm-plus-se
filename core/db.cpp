@@ -87,9 +87,9 @@ std::expected<std::map<Denomination, int>, DbError> DatabaseManager::
     return storage::load_vault_inventory(_db_handle.get());
 }
 
-std::expected<CardRecord, DbError> DatabaseManager::load_card(std::string_view card) {
+std::expected<CardRecord, DbError> DatabaseManager::load_card(std::string_view card, bool validate_only) {
     std::scoped_lock lock{_db_mutex};
-    return storage::load_card(_db_handle.get(), card);
+    return storage::load_card(_db_handle.get(), card, validate_only);
 }
 
 std::expected<void, DbError> DatabaseManager::block_card(std::string_view card) {

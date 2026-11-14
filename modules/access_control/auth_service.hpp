@@ -29,7 +29,7 @@ public:
         : _db{std::move(db)}, _audit_log{std::move(log)}
     { }
 
-    std::expected<CardRecord, AuthError> validate_card(std::string_view card);
+    std::expected<CardRecord, AuthError> validate_card(std::string_view card, bool auth = false);
     std::expected<void, AuthError>       authenticate_card(std::string_view card, std::string_view pin);
 private:
     static constexpr int kMaxFailedAttempts{3};
@@ -37,7 +37,7 @@ private:
     std::shared_ptr<DatabaseManager> _db;
     std::shared_ptr<AuditLog> _audit_log;
 
-    std::expected<CardRecord, AuthError> _load_card(std::string_view card);
+    std::expected<CardRecord, AuthError> _load_card(std::string_view card, bool validate_only);
     std::expected<void, AuthError>       _block_card(std::string_view card);
     
     std::expected<int, AuthError>        _inc_failed_attempts(std::string_view card);

@@ -33,7 +33,7 @@ class AtmController
 {
 public:
     AtmController(std::unique_ptr<CashVault> vault, std::shared_ptr<DatabaseManager> db,
-                  std::shared_ptr<AuditLog> log, AuthService auth);
+                  std::shared_ptr<AuditLog> log, std::unique_ptr<AuthService> auth);
     ~AtmController();
 
     AtmController(const AtmController&) = delete;
@@ -43,7 +43,7 @@ public:
     AtmController& operator=(AtmController&&) = delete;
 
     void transition_to(std::unique_ptr<IAtmState> new_state);
-    void start_session(CardRecord card);
+    void start_session(const CardRecord& card);
     void end_session() noexcept;
 
     std::expected<void, AtmError> process_insert_card(std::string_view card);
@@ -62,15 +62,17 @@ public:
     { return _current_state->get_state_name(); }
 
 private:
-    std::optional<SessionContext> _active_session{std::nullopt};
-
-    std::unique_ptr<IAtmState> _current_state{std::make_unique<IdleState>()};
-    std::unique_ptr<CashVault> _vault;
+    inline static constexpr std::chrono::seconds kTimeout     = 60s;
+    inline static constexpr size_t               kMaxAttempts = 3;
 
     std::shared_ptr<DatabaseManager> _db;
-    std::shared_ptr<AuditLog> _audit_log;
+    std::shared_ptr<AuditLog>        _audit_log;
 
-    AuthService _auth_service;
+    std::optional<SessionContext> _active_session{std::nullopt};
+
+    std::unique_ptr<IAtmState>   _current_state{std::make_unique<IdleState>()};
+    std::unique_ptr<CashVault>   _vault;
+    std::unique_ptr<AuthService> _auth_service;
 
     mutable std::recursive_mutex _mtx;
 };

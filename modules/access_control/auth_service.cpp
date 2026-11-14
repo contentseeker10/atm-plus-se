@@ -16,8 +16,8 @@
 
 #include "storage/operations.hpp"
 
-std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view card) {
-    auto record = _load_card(card);
+std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view card, bool auth) {
+    auto record = _load_card(card, !auth);
     if (!record) {
         return std::unexpected(record.error());
     }
@@ -31,7 +31,7 @@ std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view
 }
 
 std::expected<void, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
-    auto record = validate_card(card);
+    auto record = validate_card(card, true);
     auto hash = crypto::sha256_hex(pin, record->salt);
     if (!crypto::constant_time_compare(hash, record->pin_hash)) {
         auto inc_failed = _inc_failed_attempts(card);
@@ -54,8 +54,8 @@ std::expected<void, AuthError> AuthService::authenticate_card(std::string_view c
     return {};
 }
 
-std::expected<CardRecord, AuthError> AuthService::_load_card(std::string_view card) {
-    auto record = _db->load_card(card);
+std::expected<CardRecord, AuthError> AuthService::_load_card(std::string_view card, bool validate_only) {
+    auto record = _db->load_card(card, validate_only);
     if (!record) {
         return std::unexpected(to_auth_error(record.error()));
     }

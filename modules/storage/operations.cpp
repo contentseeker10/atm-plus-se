@@ -94,8 +94,9 @@ namespace storage
         return inventory;
     }
 
-    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card) {
-        auto stmt = prepare(db, sql::kSelectCardRecord);
+    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card, bool validate_only) {
+        auto stmt_text = validate_only ? sql::kSelectLimitedCardRecord : sql::kSelectCardRecord;
+        auto stmt = prepare(db, stmt_text);
         if (!stmt) {
             return std::unexpected(stmt.error());
         }
@@ -105,7 +106,7 @@ namespace storage
         }
 
         switch (const int rc = sqlite3_step(stmt->get())) {
-            case SQLITE_ROW:  return read_card(stmt->get());
+            case SQLITE_ROW:  return read_card(stmt->get(), validate_only);
             case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
             default:          return std::unexpected(to_db_error(rc));
         }
