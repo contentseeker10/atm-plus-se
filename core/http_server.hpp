@@ -12,11 +12,14 @@
 
 #pragma once
 
-#include "access_control/atm_controller.hpp"
-
 #include <httplib.h>
 
-inline constexpr auto HOST = "0.0.0.0";
+#include <filesystem>
+
+inline constexpr auto HOST      = "0.0.0.0";
+inline constexpr auto VIEW_PATH = "../../../view";
+
+class AtmController;
 
 class HttpServerAdapter
 {
@@ -25,18 +28,21 @@ public:
         : _atm_controller{controller}, _port{port}
     { }
 
-    void start()
-    {
-        register_routes();
-        _server.listen(HOST, _port);
+    void start() { 
+        _mount_frontend();
+        _register_routes();
+        _server.listen(HOST, _port); 
     }
-    void stop() noexcept { _server.stop(); };
+    void stop() noexcept { _server.stop(); }
 
-    void register_routes();
-
-private:
+    
+    private:
     httplib::Server _server;
     int _port{8080};
-
+    
     std::shared_ptr<AtmController> _atm_controller;
+    
+    void _mount_frontend();
+
+    void _register_routes();
 };
