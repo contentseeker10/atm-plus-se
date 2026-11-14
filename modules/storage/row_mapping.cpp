@@ -80,7 +80,7 @@ namespace storage
         auto account = column_optional_text(row, 4);
 
         auto role = UserRole::None;
-        switch (const int role_int = sqlite3_column_int64(row, 5)) {
+        switch (const int role_int = static_cast<int>(sqlite3_column_int64(row, 5))) {
             case 0: role = UserRole::Customer; break;
             case 1: role = UserRole::Engineer; break;
             default: return std::unexpected(DbError::ConstraintViolation);

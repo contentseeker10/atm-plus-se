@@ -64,7 +64,6 @@ public:
 
 private:
     inline static constexpr std::chrono::seconds kTimeout     = 60s;
-    inline static constexpr size_t               kMaxAttempts = 3;
 
     std::shared_ptr<DatabaseManager> _db;
     std::shared_ptr<AuditLog>        _audit_log;

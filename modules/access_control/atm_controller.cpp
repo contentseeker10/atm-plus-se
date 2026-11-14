@@ -40,7 +40,9 @@ void AtmController::start_session(const CardRecord& card)
 
 void AtmController::update_session(const CardRecord& card) {
     std::unique_lock lock(_mtx);
-    _active_session->record = card;
+    if (_active_session.has_value()) {
+        _active_session->record = card;
+    }
 }
 
 void AtmController::end_session() noexcept
@@ -95,10 +97,6 @@ std::expected<CardRecord, AtmError> AtmController::authenticate_card(
     std::string_view pin)
 {
     std::unique_lock lock(_mtx);
-
-    if (!_active_session.has_value()) {
-        return std::unexpected(AtmError::NoActiveSession);
-    }
 
     auto session = validate_session();
     if (!session) {

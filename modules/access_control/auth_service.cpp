@@ -41,7 +41,7 @@ std::expected<CardRecord, AuthError> AuthService::authenticate_card(std::string_
         if (!inc_failed) {
             return std::unexpected(inc_failed.error());
         }
-        if (inc_failed.value() >= kMaxFailedAttempts) {
+        if (inc_failed.value() == kMaxFailedAttempts) {
             auto block_result = _block_card(card);
             if (!block_result) {
                 return std::unexpected(block_result.error());
