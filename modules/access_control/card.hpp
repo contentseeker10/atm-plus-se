@@ -31,6 +31,12 @@ struct CardRecord final {
       failed_attempts{failed_atmps}
     {}
 
+    CardRecord(std::string card_number, bool blocked, bool expired)
+    : number{std::move(card_number)},
+      is_blocked{blocked},
+      is_expired{expired}
+    {}
+
     std::string number;
     std::string holder;
     std::string pin_hash;

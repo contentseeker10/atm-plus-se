@@ -72,28 +72,33 @@ namespace storage
         return std::nullopt;
     }
 
-    std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row, bool limited) {
-        auto card_name = column_text(row, 0);
+    std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row) {
+        auto card_number = column_text(row, 0);
         auto card_holder = column_text(row, 1);
         auto pin = column_text(row, 2);
         auto sal = column_text(row, 3);
-        
-        auto account = limited ? std::nullopt : column_optional_text(row, 4);
+        auto account = column_optional_text(row, 4);
 
         auto role = UserRole::None;
-        if (!limited) {
-            switch (const int role_int = sqlite3_column_int64(row, 5)) {
-                case 0: role = UserRole::Customer; break;
-                case 1: role = UserRole::Engineer; break;
-                default: return std::unexpected(DbError::ConstraintViolation);
-            }
+        switch (const int role_int = sqlite3_column_int64(row, 5)) {
+            case 0: role = UserRole::Customer; break;
+            case 1: role = UserRole::Engineer; break;
+            default: return std::unexpected(DbError::ConstraintViolation);
         }
 
-        auto blocked = sqlite3_column_int64(row, 5 + !limited) != 0;
-        auto expired = sqlite3_column_int64(row, 6 + !limited) != 0;
-        auto failed_atmps = sqlite3_column_int64(row, 7 + !limited);
+        auto blocked = sqlite3_column_int64(row, 6) != 0;
+        auto expired = sqlite3_column_int64(row, 7) != 0;
+        auto failed_atmps = sqlite3_column_int64(row, 8);
 
-        CardRecord record(card_name, card_holder, pin, sal, account, role, blocked, expired, failed_atmps);
+        CardRecord record(card_number, card_holder, pin, sal, account, role, blocked, expired, failed_atmps);
+        return record;
+    }
+
+    std::expected<CardRecord, DbError> read_card_limited(sqlite3_stmt* row) {
+        auto card_number = column_text(row, 0);
+        auto blocked = sqlite3_column_int64(row, 1) != 0;
+        auto expired = sqlite3_column_int64(row, 2) != 0;
+        CardRecord record(card_number, blocked, expired);
         return record;
     }
 } // namespace storage

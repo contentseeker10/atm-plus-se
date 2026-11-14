@@ -33,7 +33,8 @@ namespace storage
 
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory(sqlite3* db);
 
-    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card, bool validate_only);
+    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card);
+    std::expected<CardRecord, DbError> load_card_limited(sqlite3* db, std::string_view card);
     std::expected<void, DbError> block_card(sqlite3* db, std::string_view card);
     std::expected<int, DbError> get_failed_attempts(sqlite3* db, std::string_view card);
     std::expected<void, DbError> set_failed_attempts(sqlite3* db, std::string_view card, int amount);

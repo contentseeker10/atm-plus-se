@@ -30,5 +30,6 @@ namespace storage
 
     std::optional<Denomination> to_denomination(std::int64_t cents) noexcept;
 
-    std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row, bool limited);
+    std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row);
+    std::expected<CardRecord, DbError> read_card_limited(sqlite3_stmt* row);
 } // namespace storage

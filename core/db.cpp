@@ -89,7 +89,7 @@ std::expected<std::map<Denomination, int>, DbError> DatabaseManager::
 
 std::expected<CardRecord, DbError> DatabaseManager::load_card(std::string_view card, bool validate_only) {
     std::scoped_lock lock{_db_mutex};
-    return storage::load_card(_db_handle.get(), card, validate_only);
+    return validate_only ? storage::load_card_limited(_db_handle.get(), card) : storage::load_card(_db_handle.get(), card);
 }
 
 std::expected<void, DbError> DatabaseManager::block_card(std::string_view card) {

@@ -32,6 +32,9 @@ std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view
 
 std::expected<CardRecord, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
     auto record = validate_card(card, true);
+    if (!record) {
+        return std::unexpected(record.error());
+    }
     auto hash = crypto::sha256_hex(pin, record->salt);
     if (!crypto::constant_time_compare(hash, record->pin_hash)) {
         auto inc_failed = _inc_failed_attempts(card);

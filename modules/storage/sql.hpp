@@ -77,8 +77,7 @@ WHERE account_id = ?1
         "SELECT denomination_cents, bill_count FROM vault_cassettes";
 
     inline constexpr std::string_view kSelectLimitedCardRecord = R"sql(
-        SELECT card_number, card_holder, pin_hash, salt, 
-                is_blocked, is_expired, failed_attempts 
+        SELECT card_number, is_blocked, is_expired 
         FROM cards 
         WHERE card_number = ?1
     )sql";
