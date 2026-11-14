@@ -25,6 +25,11 @@ public:
 
     std::expected<void, AccountError> cover_overdraft(std::int64_t deficit_cents);
 
+    double get_annual_interest_rate() const noexcept { return _annual_interest_rate; }
+
+    std::int64_t get_minimum_balance_cents() const noexcept
+    { return _minimum_balance_cents; }
+
     bool validate_invariants() const noexcept override;
 
 private:

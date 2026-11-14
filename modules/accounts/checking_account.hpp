@@ -32,6 +32,11 @@ public:
 
     std::int64_t get_client_min_cents() const noexcept { return _client_min_cents; }
 
+    std::int64_t get_overflow_max_cents() const noexcept { return _overflow_max_cents; }
+
+    const std::optional<std::string>& get_linked_savings_id() const noexcept
+    { return _linked_savings_id; }
+
     bool validate_invariants() const noexcept override;
 
 private:

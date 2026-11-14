@@ -29,6 +29,8 @@ Account::~Account() noexcept = default;
 
 const std::string& Account::get_account_id() const noexcept { return _account_id; }
 
+const std::string& Account::get_client_id() const noexcept { return _client_id; }
+
 std::int64_t Account::get_balance() const noexcept { return _balance_cents; }
 
 std::expected<void, AccountError> Account::deposit(std::int64_t amount_cents)

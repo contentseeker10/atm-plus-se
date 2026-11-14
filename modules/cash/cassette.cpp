@@ -35,6 +35,8 @@ Denomination Cassette::get_denomination() const noexcept { return _denomination;
 
 int Cassette::get_count() const noexcept { return _current_count; }
 
+int Cassette::get_max_capacity() const noexcept { return _max_capacity; }
+
 bool Cassette::can_accept(int count) const noexcept
 { return count > 0 && count <= _max_capacity - _current_count; }
 
