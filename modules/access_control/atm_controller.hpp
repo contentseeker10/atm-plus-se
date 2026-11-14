@@ -44,6 +44,7 @@ public:
 
     void transition_to(std::unique_ptr<IAtmState> new_state);
     void start_session(const CardRecord& card);
+    void update_session(const CardRecord& card);
     void end_session() noexcept;
 
     std::expected<void, AtmError> process_insert_card(std::string_view card);
@@ -52,8 +53,8 @@ public:
     std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
     
     std::expected<CardRecord, AtmError> validate_card(std::string_view card);
-    std::expected<void, AtmError> validate_active_session();
-    std::expected<void, AtmError> authenticate_current_card(std::string_view card);
+    std::expected<CardRecord, AtmError> authenticate_card(std::string_view card);
+    std::expected<void, AtmError>       validate_session();
 
     std::optional<std::string> get_active_session_id() const;
     UserRole                   get_active_role()       const;

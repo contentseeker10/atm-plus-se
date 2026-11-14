@@ -30,7 +30,7 @@ public:
     { }
 
     std::expected<CardRecord, AuthError> validate_card(std::string_view card, bool auth = false);
-    std::expected<void, AuthError>       authenticate_card(std::string_view card, std::string_view pin);
+    std::expected<CardRecord, AuthError> authenticate_card(std::string_view card, std::string_view pin);
 private:
     static constexpr int kMaxFailedAttempts{3};
     

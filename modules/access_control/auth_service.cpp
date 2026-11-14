@@ -30,7 +30,7 @@ std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view
     return record.value();
 }
 
-std::expected<void, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
+std::expected<CardRecord, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
     auto record = validate_card(card, true);
     auto hash = crypto::sha256_hex(pin, record->salt);
     if (!crypto::constant_time_compare(hash, record->pin_hash)) {
@@ -51,7 +51,7 @@ std::expected<void, AuthError> AuthService::authenticate_card(std::string_view c
     if (!reset) {
         return std::unexpected(reset.error());
     }
-    return {};
+    return record;
 }
 
 std::expected<CardRecord, AuthError> AuthService::_load_card(std::string_view card, bool validate_only) {

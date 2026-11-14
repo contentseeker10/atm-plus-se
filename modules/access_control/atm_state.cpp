@@ -28,15 +28,18 @@ std::expected<void, AtmError> IdleState::insert_card(AtmController& ctx,
 std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& ctx,
                                                            std::string_view pin)
 {
-    auto result = ctx.authenticate_current_card(pin);
-    if (!result)
+    auto record = ctx.authenticate_card(pin);
+    if (!record)
     {
-        if (result.error() == AtmError::CardBlocked || result.error() == AtmError::MaxAttemptsExceeded) {
+        if (record.error() == AtmError::CardBlocked || record.error() == AtmError::MaxAttemptsExceeded) {
             ctx.end_session();
             ctx.transition_to(std::make_unique<IdleState>());
         }
-        return std::unexpected(result.error());
+        return std::unexpected(record.error());
     }
+
+    ctx.update_session(record.value());
+
     auto role = ctx.get_active_role();
     if (role == UserRole::Customer)
     {

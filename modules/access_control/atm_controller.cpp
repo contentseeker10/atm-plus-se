@@ -38,6 +38,11 @@ void AtmController::start_session(const CardRecord& card)
     _active_session.emplace(session);
 }
 
+void AtmController::update_session(const CardRecord& card) {
+    std::unique_lock lock(_mtx);
+    _active_session->record = card;
+}
+
 void AtmController::end_session() noexcept
 {
     std::unique_lock lock(_mtx);
@@ -68,7 +73,7 @@ std::expected<CardRecord, AtmError> AtmController::validate_card(std::string_vie
     return result.value();
 }
 
-std::expected<void, AtmError> AtmController::validate_active_session()
+std::expected<void, AtmError> AtmController::validate_session()
 {
     std::unique_lock lock(_mtx);
 
@@ -86,7 +91,7 @@ std::expected<void, AtmError> AtmController::validate_active_session()
     return {};
 }
 
-std::expected<void, AtmError> AtmController::authenticate_current_card(
+std::expected<CardRecord, AtmError> AtmController::authenticate_card(
     std::string_view pin)
 {
     std::unique_lock lock(_mtx);
@@ -95,9 +100,9 @@ std::expected<void, AtmError> AtmController::authenticate_current_card(
         return std::unexpected(AtmError::NoActiveSession);
     }
 
-    auto validate_session = validate_active_session();
-    if (!validate_session) {
-        return std::unexpected(validate_session.error());
+    auto session = validate_session();
+    if (!session) {
+        return std::unexpected(session.error());
     }
 
     auto auth_result = _auth_service->authenticate_card(_active_session->record.number, pin);
@@ -105,7 +110,7 @@ std::expected<void, AtmError> AtmController::authenticate_current_card(
     {
         return std::unexpected(to_atm_error(auth_result.error()));
     }
-    return {};
+    return auth_result.value();
 }
 
 std::optional<std::string> AtmController::get_active_session_id() const
