@@ -12,6 +12,8 @@
 
 #include "auth_service.hpp"
 
+#include "crypto.hpp"
+
 #include "storage/operations.hpp"
 
 std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view card) {
@@ -25,11 +27,20 @@ std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view
     return record.value();
 }
 
-std::expected<UserRole, AuthError> AuthService::authenticate_card(std::string_view pin) {
-    // TODO: compare pin with pin_hash + salt from _record
-    // TODO: increment failed_attempts count if wrong pin 
-    // TODO: block card if attempts to auth exceeded
-    // TODO: return CardRecord.UserRole or Error
+std::expected<void, AuthError> AuthService::authenticate_card(std::string_view card, std::string_view pin) {
+    auto record = _load_card(card);
+    auto hash = crypto::sha256_hex(pin);
+    if (!crypto::constant_time_compare(hash, record->pin_hash)) {
+        auto inc_failed = _inc_failed_attempts(card);
+        if (!inc_failed) {
+            return std::unexpected(inc_failed.error());
+        }
+        if (inc_failed.value() >= 3) {
+            _block_card(card);
+            return std::unexpected(AuthError::MaxAttemptsExceeded);
+        }
+        return std::unexpected(AuthError::InvalidPin);
+    }
     return {};
 }
 
@@ -47,6 +58,22 @@ std::expected<void, AuthError> AuthService::_block_card(std::string_view card) {
         return std::unexpected(AuthError::DatabaseError);
     }
     return {};
+}
+
+std::expected<int, AuthError> AuthService::_inc_failed_attempts(std::string_view card) {
+    auto current_failed = _db->get_failed_attempts(card);
+    if (!current_failed) {
+        return std::unexpected(AuthError::DatabaseError);
+    }
+
+    auto attempts = current_failed.value();
+
+    if (attempts > 3) {
+        return std::unexpected(AuthError::MaxAttemptsExceeded);
+    }
+
+    _db->set_failed_attempts(card, ++attempts);
+    return attempts;
 }
 
 bool AuthService::_is_card_blocked(std::string_view card) const {

@@ -130,5 +130,48 @@ namespace storage
         if (sqlite3_changes64(db) == 0) { 
             return std::unexpected(DbError::RecordNotFound); 
         }
+
+        return {};
+    }
+
+    std::expected<int, DbError> get_failed_attempts(sqlite3* db, std::string_view card) {
+        auto stmt = prepare(db, sql::kSelectAttempts);
+        if (!stmt) {
+            return std::unexpected(stmt.error());
+        }
+
+        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK) {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        switch (const int rc = sqlite3_step(stmt->get())) {
+            case SQLITE_ROW:  return sqlite3_column_int64(stmt->get(), 1);
+            case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
+            default:          return std::unexpected(to_db_error(rc));
+        }
+    }
+    
+    std::expected<void, DbError> set_failed_attempts(sqlite3* db, std::string_view card, int amount) {
+        auto stmt = prepare(db, sql::kUpdateAttempts);
+        if (!stmt) {
+            return std::unexpected(stmt.error());
+        }
+
+        if (const int rc = sqlite3_bind_int64(stmt->get(), 1, amount); rc != SQLITE_OK) {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        if (const int rc = bind_text(stmt->get(), 2, card); rc != SQLITE_OK) {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE) {
+            return std::unexpected(to_db_error(rc));
+        }
+        if (sqlite3_changes64(db) == 0) { 
+            return std::unexpected(DbError::RecordNotFound); 
+        }
+
+        return {};
     }
 } // namespace storage
