@@ -13,16 +13,92 @@
 #include "cash_vault.hpp"
 
 #include <algorithm>
+#include <cstddef>
+#include <limits>
+#include <optional>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace
 {
+    constexpr std::int64_t kBillUnitCents = 1000;
+
     constexpr bool can_be_composed(const std::int64_t amount_cents) noexcept
-    { return amount_cents % 1000 == 0; }
+    { return amount_cents % kBillUnitCents == 0; }
 
     constexpr std::int64_t to_cents(Denomination denomination) noexcept
     { return static_cast<std::int64_t>(denomination); }
+
+    constexpr int kUnreachable = std::numeric_limits<int>::max();
+
+    struct BillBundle
+    {
+        Denomination denomination;
+        int bills;
+        std::size_t units;
+    };
+
+    std::vector<BillBundle> split_into_bundles(
+        const std::map<Denomination, Cassette>& cassettes, std::size_t target_units)
+    {
+        std::vector<BillBundle> bundles;
+        for (auto it = cassettes.cbegin(); it != cassettes.cend(); ++it)
+        {
+            const auto bill_units =
+                static_cast<std::size_t>(to_cents(it->first) / kBillUnitCents);
+            const auto usable = static_cast<int>(
+                std::min<std::size_t>(static_cast<std::size_t>(it->second.get_count()),
+                                      target_units / bill_units));
+
+            int left = usable;
+            for (int chunk = 1; left > 0; chunk *= 2)
+            {
+                const int bills = std::min(chunk, left);
+                bundles.push_back(
+                    {it->first, bills, bill_units * static_cast<std::size_t>(bills)});
+                left -= bills;
+            }
+        }
+        return bundles;
+    }
+
+    std::optional<std::map<Denomination, int>> find_fewest_bills(
+        const std::map<Denomination, Cassette>& cassettes, std::size_t target_units)
+    {
+        const auto bundles = split_into_bundles(cassettes, target_units);
+
+        std::vector<int> fewest(target_units + 1, kUnreachable);
+        fewest[0] = 0;
+        std::vector<std::vector<bool>> taken(bundles.size(),
+                                             std::vector<bool>(target_units + 1, false));
+
+        for (std::size_t i = 0; i < bundles.size(); ++i)
+        {
+            const auto& bundle = bundles[i];
+            for (std::size_t value = target_units; value >= bundle.units; --value)
+            {
+                const int previous = fewest[value - bundle.units];
+                if (previous != kUnreachable && previous + bundle.bills < fewest[value])
+                {
+                    fewest[value] = previous + bundle.bills;
+                    taken[i][value] = true;
+                }
+            }
+        }
+
+        if (fewest[target_units] == kUnreachable) return std::nullopt;
+
+        std::map<Denomination, int> plan;
+        std::size_t remaining = target_units;
+        for (std::size_t i = bundles.size(); i-- > 0;)
+        {
+            if (!taken[i][remaining]) continue;
+            plan[bundles[i].denomination] += bundles[i].bills;
+            remaining -= bundles[i].units;
+        }
+        return plan;
+    }
 } // namespace
 
 CashVault::CashVault(std::map<Denomination, Cassette> cassettes)
@@ -46,22 +122,10 @@ std::expected<std::map<Denomination, int>, VaultError> CashVault::calculate_disp
     if (amount_cents > get_total_cash_cents())
         return std::unexpected(VaultError::InsufficientCash);
 
-    std::map<Denomination, int> plan;
-    std::int64_t remaining = amount_cents;
-    for (auto it = _cassettes.crbegin(); it != _cassettes.crend(); ++it)
-    {
-        const std::int64_t bill_cents = to_cents(it->first);
-        const std::int64_t bills =
-            std::min<std::int64_t>(it->second.get_count(), remaining / bill_cents);
-        if (bills > 0)
-        {
-            plan[it->first] = static_cast<int>(bills);
-            remaining -= bills * bill_cents;
-        }
-    }
-
-    if (remaining != 0) return std::unexpected(VaultError::NoExactCombination);
-    return plan;
+    auto plan = find_fewest_bills(
+        _cassettes, static_cast<std::size_t>(amount_cents / kBillUnitCents));
+    if (!plan) return std::unexpected(VaultError::NoExactCombination);
+    return std::move(*plan);
 }
 
 std::expected<void, VaultError> CashVault::execute_dispense(
