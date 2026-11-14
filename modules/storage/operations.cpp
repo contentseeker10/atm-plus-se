@@ -112,9 +112,19 @@ namespace storage
     }
 
     std::expected<CardRecord, DbError> load_card_limited(sqlite3* db, std::string_view card) {
-        auto stmt = prepare(db, sql::kSelectCardRecord);
+        auto stmt = prepare(db, sql::kSelectLimitedCardRecord);
         if (!stmt) {
             return std::unexpected(stmt.error());
+        }
+
+        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK) {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        switch (const int rc = sqlite3_step(stmt->get())) {
+            case SQLITE_ROW:  return read_card_limited(stmt->get());
+            case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
+            default:          return std::unexpected(to_db_error(rc));
         }
     }
 
@@ -152,7 +162,7 @@ namespace storage
         }
 
         switch (const int rc = sqlite3_step(stmt->get())) {
-            case SQLITE_ROW:  return sqlite3_column_int64(stmt->get(), 0);
+            case SQLITE_ROW:  return static_cast<int>(sqlite3_column_int64(stmt->get(), 0));
             case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
             default:          return std::unexpected(to_db_error(rc));
         }

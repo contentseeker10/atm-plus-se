@@ -88,7 +88,7 @@ namespace storage
 
         auto blocked = sqlite3_column_int64(row, 6) != 0;
         auto expired = sqlite3_column_int64(row, 7) != 0;
-        auto failed_atmps = sqlite3_column_int64(row, 8);
+        auto failed_atmps = static_cast<int>(sqlite3_column_int64(row, 8));
 
         CardRecord record(card_number, card_holder, pin, sal, account, role, blocked, expired, failed_atmps);
         return record;
