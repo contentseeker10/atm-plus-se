@@ -34,17 +34,15 @@
 #include <string>
 #include <string_view>
 
-constexpr std::string_view DB_PATH     = "./atm.db";
-constexpr std::string      HMAC_SECRET = "bebra";
+constexpr std::string_view DB_PATH = "./atm.db";
+constexpr std::string HMAC_SECRET = "bebra";
 
-void log(const char* msg, bool err = false) { 
-    if (!err) 
+void log(const char* msg, bool err = false)
+{
+    if (!err) { std::println("[ATM+SE] {}", msg); }
+    else
     {
-        std::println("[ATM+SE] {}", msg); 
-    }
-    else 
-    {
-        std::println("\033[31m[ATM+SE] [ERROR] {}\033[0m", msg); 
+        std::println("\033[31m[ATM+SE] [ERROR] {}\033[0m", msg);
     }
 }
 
@@ -58,8 +56,9 @@ int main()
         auto db = std::make_shared<DatabaseManager>(DB_PATH);
 
         const char* env_hmac = std::getenv("ATM_HMAC_SECRET");
-        const std::string hmac_secret =
-            (env_hmac != nullptr && *env_hmac != '\0') ? std::string{env_hmac} : HMAC_SECRET;
+        const std::string hmac_secret = (env_hmac != nullptr && *env_hmac != '\0')
+                                            ? std::string{env_hmac}
+                                            : HMAC_SECRET;
 
         log("Seeding Database and Loading Cash Vault...");
         std::map<Denomination, Cassette> cassettes;
@@ -106,7 +105,10 @@ int main()
         log("Server successfully started.");
         http.start();
     }
-    catch(const std::exception& e) { log(e.what(), true); }
+    catch (const std::exception& e)
+    {
+        log(e.what(), true);
+    }
 
     return 0;
 }

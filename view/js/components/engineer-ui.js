@@ -28,6 +28,9 @@ export class EngineerUiComponent {
       case ENGINEER_VIEWS.AUDIT:
         this._renderAudit(state);
         break;
+      case ENGINEER_VIEWS.ADMIN:
+        this._renderAdmin(state);
+        break;
       case ENGINEER_VIEWS.AUTH_KEY:
       default:
         this._renderAuthKey(state);
@@ -125,6 +128,10 @@ export class EngineerUiComponent {
         variant: 'primary',
         action: () => this._actions.refreshVault()
       },
+      F7: {
+        label: 'Card Administration',
+        action: () => this._actions.openAdminView()
+      },
       F2: {
         label: 'Replenish Cash',
         action: () => store.setState({ engineerView: ENGINEER_VIEWS.REPLENISH, alert: null })
@@ -205,8 +212,23 @@ export class EngineerUiComponent {
         <div class="cassettes-grid">
           ${cassettesHtml}
         </div>
+
+        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+          <button
+            type="button"
+            id="vault-force-open-btn"
+            class="screen-btn screen-btn-danger"
+            ${state.isBusy ? 'disabled' : ''}
+          >
+            Simulate Forced Opening (Alarm)
+          </button>
+        </div>
       </div>
     `;
+
+    qs('#vault-force-open-btn', this._viewportEl)?.addEventListener('click', () => {
+      this._actions.forceVaultDoor();
+    });
   }
 
   _renderReplenish(state) {
@@ -497,10 +519,74 @@ export class EngineerUiComponent {
             >
               Restore Tampered Record
             </button>
+            <button
+              type="button"
+              id="audit-export-btn"
+              class="screen-btn"
+              ${state.isBusy ? 'disabled' : ''}
+            >
+              Export CSV Report
+            </button>
           </div>
         </div>
 
         ${integrityBannerHtml}
+
+        <form id="audit-filter-form" class="screen-panel" style="gap:10px; padding:12px;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">SINCE (ISO)</span>
+              <input
+                type="text"
+                id="audit-filter-since"
+                class="screen-input"
+                placeholder="2026-01-01T00:00:00Z"
+                value="${escapeHtml(state.auditFilter.since)}"
+              >
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">UNTIL (ISO)</span>
+              <input
+                type="text"
+                id="audit-filter-until"
+                class="screen-input"
+                placeholder="2026-12-31T23:59:59Z"
+                value="${escapeHtml(state.auditFilter.until)}"
+              >
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">CARD</span>
+              <input
+                type="text"
+                id="audit-filter-card"
+                class="screen-input"
+                placeholder="card / account"
+                value="${escapeHtml(state.auditFilter.card)}"
+              >
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">EVENT</span>
+              <input
+                type="text"
+                id="audit-filter-event"
+                class="screen-input"
+                placeholder="e.g. CARD_ACCESS_DENIED"
+                value="${escapeHtml(state.auditFilter.event)}"
+              >
+            </label>
+            <button type="submit" class="screen-btn screen-btn-primary" ${state.isBusy ? 'disabled' : ''}>
+              Apply Filter
+            </button>
+            <button
+              type="button"
+              id="audit-filter-clear-btn"
+              class="screen-btn"
+              ${state.isBusy ? 'disabled' : ''}
+            >
+              Clear
+            </button>
+          </div>
+        </form>
 
         <div class="audit-table-wrap">
           <table class="audit-table">
@@ -532,6 +618,245 @@ export class EngineerUiComponent {
 
     qs('#audit-restore-btn', this._viewportEl)?.addEventListener('click', () => {
       this._actions.simulateTamper(true);
+    });
+
+    qs('#audit-export-btn', this._viewportEl)?.addEventListener('click', () => {
+      this._actions.exportAuditCsv();
+    });
+
+    const filterForm = qs('#audit-filter-form', this._viewportEl);
+    if (filterForm) {
+      filterForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this._actions.setAuditFilterField('since', qs('#audit-filter-since', this._viewportEl)?.value.trim() || '');
+        this._actions.setAuditFilterField('until', qs('#audit-filter-until', this._viewportEl)?.value.trim() || '');
+        this._actions.setAuditFilterField('card', qs('#audit-filter-card', this._viewportEl)?.value.trim() || '');
+        this._actions.setAuditFilterField('event', qs('#audit-filter-event', this._viewportEl)?.value.trim() || '');
+        this._actions.applyAuditFilter();
+      });
+    }
+
+    qs('#audit-filter-clear-btn', this._viewportEl)?.addEventListener('click', () => {
+      this._actions.setAuditFilterField('since', '');
+      this._actions.setAuditFilterField('until', '');
+      this._actions.setAuditFilterField('card', '');
+      this._actions.setAuditFilterField('event', '');
+      this._actions.applyAuditFilter();
+    });
+  }
+
+  _renderAdmin(state) {
+    store.setSideKeys({
+      F1: {
+        label: 'Vault Diagnostics',
+        action: () => store.setState({ engineerView: ENGINEER_VIEWS.VAULT, alert: null })
+      },
+      F2: {
+        label: 'Replenish Cash',
+        action: () => store.setState({ engineerView: ENGINEER_VIEWS.REPLENISH, alert: null })
+      },
+      F3: {
+        label: 'Audit & Integrity',
+        action: () => this._actions.openAuditView()
+      },
+      F7: {
+        label: 'Refresh Registry',
+        variant: 'primary',
+        action: () => this._actions.refreshAdminCards()
+      },
+      F8: {
+        label: 'Eject Service Card',
+        variant: 'danger',
+        action: () => this._actions.ejectCard()
+      }
+    });
+
+    const cards = state.adminCards || [];
+    const rowsHtml =
+      cards.length === 0
+        ? `<tr><td colspan="7">No cards registered.</td></tr>`
+        : cards
+            .map(
+              (c) => `
+                <tr class="${c.revoked ? 'tampered-row' : ''}">
+                  <td>${escapeHtml(c.cardNumber)}</td>
+                  <td>${escapeHtml(c.holder)}</td>
+                  <td>${escapeHtml(c.role)}</td>
+                  <td>${c.blocked ? 'BLOCKED' : c.revoked ? 'REVOKED' : c.expired ? 'EXPIRED' : 'ACTIVE'}</td>
+                  <td>${c.windowStart === null || c.windowStart === undefined
+                    ? 'ANY'
+                    : `${c.windowStart}:00-${c.windowEnd}:00`}</td>
+                  <td>${escapeHtml(c.checkingAccountId || '-')}</td>
+                  <td>
+                    <button
+                      type="button"
+                      class="screen-btn screen-btn-danger"
+                      data-revoke-card="${escapeHtml(c.cardNumber)}"
+                      ${state.isBusy || c.revoked ? 'disabled' : ''}
+                    >
+                      Revoke
+                    </button>
+                  </td>
+                </tr>
+              `
+            )
+            .join('');
+
+    this._viewportEl.innerHTML = `
+      <div class="screen-panel">
+        <div class="eng-header-bar">
+          <div>
+            <h2 class="screen-title">CARD ADMINISTRATION</h2>
+            <p class="screen-subtitle">
+              Issue and revoke cards, assign access rights and time windows without recompiling.
+              Every change is recorded in the tamper-evident audit chain.
+            </p>
+          </div>
+          <span class="eng-badge door-open">ADMIN</span>
+        </div>
+
+        <form id="admin-issue-form" class="screen-panel" style="gap:10px;">
+          <h3 class="screen-subtitle">ISSUE NEW CARD</h3>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">CARD NUMBER</span>
+              <input type="text" id="admin-issue-number" class="screen-input" placeholder="4111-..." required>
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">HOLDER</span>
+              <input type="text" id="admin-issue-holder" class="screen-input" placeholder="FULL NAME" required>
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">PIN (4)</span>
+              <input type="password" id="admin-issue-pin" class="screen-input" maxlength="4" required>
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">ROLE</span>
+              <select id="admin-issue-role" class="screen-input">
+                <option value="Customer">Customer</option>
+                <option value="Engineer">Engineer</option>
+              </select>
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">CHECKING ACCOUNT</span>
+              <input type="text" id="admin-issue-account" class="screen-input" placeholder="CHK-... (optional)">
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">WINDOW START (H)</span>
+              <input type="number" id="admin-issue-wstart" class="screen-input" min="0" max="23" placeholder="any">
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">WINDOW END (H)</span>
+              <input type="number" id="admin-issue-wend" class="screen-input" min="0" max="23" placeholder="any">
+            </label>
+            <button type="submit" class="screen-btn screen-btn-primary" ${state.isBusy ? 'disabled' : ''}>
+              Issue Card
+            </button>
+          </div>
+        </form>
+
+        <form id="admin-access-form" class="screen-panel" style="gap:10px;">
+          <h3 class="screen-subtitle">CHANGE ACCESS RIGHTS / TIME WINDOW</h3>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">CARD NUMBER</span>
+              <input type="text" id="admin-access-number" class="screen-input" placeholder="4111-..." required>
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">ROLE</span>
+              <select id="admin-access-role" class="screen-input">
+                <option value="">keep</option>
+                <option value="Customer">Customer</option>
+                <option value="Engineer">Engineer</option>
+              </select>
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">WINDOW START (H)</span>
+              <input type="number" id="admin-access-wstart" class="screen-input" min="0" max="23" placeholder="clear">
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span class="screen-label">WINDOW END (H)</span>
+              <input type="number" id="admin-access-wend" class="screen-input" min="0" max="23" placeholder="clear">
+            </label>
+            <button type="submit" class="screen-btn" ${state.isBusy ? 'disabled' : ''}>
+              Update Access
+            </button>
+          </div>
+        </form>
+
+        <div class="audit-table-wrap">
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>Card</th>
+                <th>Holder</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Time Window</th>
+                <th>Account</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const issueForm = qs('#admin-issue-form', this._viewportEl);
+    if (issueForm) {
+      issueForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const numberInput = qs('#admin-issue-number', this._viewportEl);
+        const pinInput = qs('#admin-issue-pin', this._viewportEl);
+        const wStart = qs('#admin-issue-wstart', this._viewportEl)?.value.trim();
+        const wEnd = qs('#admin-issue-wend', this._viewportEl)?.value.trim();
+        const payload = {
+          cardNumber: numberInput?.value.trim(),
+          holder: qs('#admin-issue-holder', this._viewportEl)?.value.trim(),
+          pin: pinInput?.value,
+          role: qs('#admin-issue-role', this._viewportEl)?.value,
+          checkingAccountId: qs('#admin-issue-account', this._viewportEl)?.value.trim() || null
+        };
+        if (wStart !== '' && wEnd !== '') {
+          payload.windowStart = Number(wStart);
+          payload.windowEnd = Number(wEnd);
+        }
+        if (pinInput) wipeInput(pinInput);
+        this._actions.issueCard(payload);
+      });
+    }
+
+    const accessForm = qs('#admin-access-form', this._viewportEl);
+    if (accessForm) {
+      accessForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const wStart = qs('#admin-access-wstart', this._viewportEl)?.value.trim();
+        const wEnd = qs('#admin-access-wend', this._viewportEl)?.value.trim();
+        const payload = {
+          cardNumber: qs('#admin-access-number', this._viewportEl)?.value.trim()
+        };
+        const role = qs('#admin-access-role', this._viewportEl)?.value;
+        if (role) {
+          payload.role = role;
+        }
+        if (wStart !== '' && wEnd !== '') {
+          payload.windowStart = Number(wStart);
+          payload.windowEnd = Number(wEnd);
+        } else {
+          payload.windowStart = null;
+          payload.windowEnd = null;
+        }
+        this._actions.setCardAccess(payload);
+      });
+    }
+
+    this._viewportEl.querySelectorAll('[data-revoke-card]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._actions.revokeCard(btn.getAttribute('data-revoke-card'));
+      });
     });
   }
 }

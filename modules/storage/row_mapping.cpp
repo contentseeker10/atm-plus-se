@@ -74,7 +74,8 @@ namespace storage
         return std::nullopt;
     }
 
-    std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row) {
+    std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row)
+    {
         auto card_number = column_text(row, 0);
         auto card_holder = column_text(row, 1);
         auto pin = column_text(row, 2);
@@ -82,25 +83,46 @@ namespace storage
         auto account = column_optional_text(row, 4);
 
         auto role = UserRole::None;
-        switch (const int role_int = static_cast<int>(sqlite3_column_int64(row, 5))) {
-            case 0: role = UserRole::Customer; break;
-            case 1: role = UserRole::Engineer; break;
-            default: return std::unexpected(DbError::ConstraintViolation);
+        switch (const int role_int = static_cast<int>(sqlite3_column_int64(row, 5)))
+        {
+        case 0: role = UserRole::Customer; break;
+        case 1: role = UserRole::Engineer; break;
+        default: return std::unexpected(DbError::ConstraintViolation);
         }
 
         auto blocked = sqlite3_column_int64(row, 6) != 0;
         auto expired = sqlite3_column_int64(row, 7) != 0;
         auto failed_atmps = static_cast<int>(sqlite3_column_int64(row, 8));
 
-        CardRecord record(card_number, card_holder, pin, sal, account, role, blocked, expired, failed_atmps);
+        CardRecord record(card_number, card_holder, pin, sal, account, role, blocked,
+                          expired, failed_atmps);
+        record.is_revoked = sqlite3_column_int64(row, 9) != 0;
+        record.access_window_start =
+            sqlite3_column_type(row, 10) == SQLITE_NULL
+                ? std::nullopt
+                : std::optional<int>{static_cast<int>(sqlite3_column_int64(row, 10))};
+        record.access_window_end =
+            sqlite3_column_type(row, 11) == SQLITE_NULL
+                ? std::nullopt
+                : std::optional<int>{static_cast<int>(sqlite3_column_int64(row, 11))};
         return record;
     }
 
-    std::expected<CardRecord, DbError> read_card_limited(sqlite3_stmt* row) {
+    std::expected<CardRecord, DbError> read_card_limited(sqlite3_stmt* row)
+    {
         auto card_number = column_text(row, 0);
         auto blocked = sqlite3_column_int64(row, 1) != 0;
         auto expired = sqlite3_column_int64(row, 2) != 0;
         CardRecord record(card_number, blocked, expired);
+        record.is_revoked = sqlite3_column_int64(row, 3) != 0;
+        record.access_window_start =
+            sqlite3_column_type(row, 4) == SQLITE_NULL
+                ? std::nullopt
+                : std::optional<int>{static_cast<int>(sqlite3_column_int64(row, 4))};
+        record.access_window_end =
+            sqlite3_column_type(row, 5) == SQLITE_NULL
+                ? std::nullopt
+                : std::optional<int>{static_cast<int>(sqlite3_column_int64(row, 5))};
         return record;
     }
 
@@ -119,4 +141,4 @@ namespace storage
         entry.hmac_signature = column_text(row, 9);
         return entry;
     }
-}
+} // namespace storage

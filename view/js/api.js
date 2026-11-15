@@ -149,11 +149,11 @@ export const api = {
       'X-Master-Key': masterKey
     });
   },
-  setVaultDoor(token, masterKey, open) {
+  setVaultDoor(token, masterKey, open, forced = false) {
     return request(
       'POST',
       '/engineer/vault-door',
-      { open },
+      { open, forced },
       {
         Authorization: `Bearer ${token}`,
         'X-Master-Key': masterKey
@@ -166,16 +166,69 @@ export const api = {
       'X-Master-Key': masterKey
     });
   },
-  getAuditLog(token, masterKey, { offset = 0, limit = 0 } = {}) {
-    let path = '/engineer/audit';
-    if (offset > 0 || limit > 0) {
-      const params = new URLSearchParams({
-        offset: String(offset),
-        limit: String(limit)
-      });
-      path = `${path}?${params.toString()}`;
+  getAuditLog(token, masterKey, { offset = 0, limit = 0, filter = {} } = {}) {
+    const params = new URLSearchParams();
+    if (offset > 0) params.set('offset', String(offset));
+    if (limit > 0) params.set('limit', String(limit));
+    for (const key of ['since', 'until', 'card', 'event']) {
+      if (filter[key]) params.set(key, filter[key]);
     }
+    const query = params.toString();
+    const path = query ? `/engineer/audit?${query}` : '/engineer/audit';
     return request('GET', path, null, {
+      Authorization: `Bearer ${token}`,
+      'X-Master-Key': masterKey
+    });
+  },
+  exportAuditCsv(token, masterKey, filter = {}) {
+    const params = new URLSearchParams();
+    for (const key of ['since', 'until', 'card', 'event']) {
+      if (filter[key]) params.set(key, filter[key]);
+    }
+    const query = params.toString();
+    const path = query ? `/engineer/audit/export?${query}` : '/engineer/audit/export';
+    const base = CONFIG.API_BASE_URL;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      'X-Master-Key': masterKey
+    };
+    return fetch(`${base}${path}`, { headers }).then(async (resp) => {
+      if (!resp.ok) {
+        let message = `Export failed (HTTP ${resp.status})`;
+        try {
+          const body = await resp.json();
+          if (body && body.message) message = body.message;
+        } catch (_) { /* csv endpoint, non-json errors only */ }
+        throw new ApiError(message, resp.status);
+      }
+      return resp.text();
+    });
+  },
+  listCards(token, masterKey) {
+    return request('GET', '/engineer/cards', null, {
+      Authorization: `Bearer ${token}`,
+      'X-Master-Key': masterKey
+    });
+  },
+  issueCard(token, masterKey, payload) {
+    return request('POST', '/engineer/cards', payload, {
+      Authorization: `Bearer ${token}`,
+      'X-Master-Key': masterKey
+    });
+  },
+  revokeCard(token, masterKey, cardNumber) {
+    return request(
+      'POST',
+      '/engineer/cards/revoke',
+      { cardNumber },
+      {
+        Authorization: `Bearer ${token}`,
+        'X-Master-Key': masterKey
+      }
+    );
+  },
+  setCardAccess(token, masterKey, payload) {
+    return request('POST', '/engineer/cards/access', payload, {
       Authorization: `Bearer ${token}`,
       'X-Master-Key': masterKey
     });

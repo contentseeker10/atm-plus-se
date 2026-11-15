@@ -21,6 +21,9 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
+
+#include "storage/operations.hpp"
 
 struct sqlite3;
 
@@ -44,11 +47,21 @@ public:
         std::function<bool(sqlite3*)> tx_block);
     std::expected<std::map<Denomination, int>, DbError> load_vault_inventory();
 
-    std::expected<CardRecord, DbError> load_card(std::string_view card, bool validate_only);
-    std::expected<void, DbError>       block_card(std::string_view card);
-    std::expected<void, DbError>       unlock_card(std::string_view card);
-    std::expected<int, DbError>        get_failed_attempts(std::string_view card);
-    std::expected<void, DbError>       set_failed_attempts(std::string_view card, int amount);
+    std::expected<CardRecord, DbError> load_card(std::string_view card,
+                                                 bool validate_only);
+    std::expected<void, DbError> block_card(std::string_view card);
+    std::expected<void, DbError> unlock_card(std::string_view card);
+    std::expected<void, DbError> revoke_card(std::string_view card);
+    std::expected<void, DbError> issue_card(const CardRecord& card,
+                                            const std::string& salt);
+    std::expected<void, DbError> set_card_role(std::string_view card, UserRole role);
+    std::expected<void, DbError> set_card_window(std::string_view card,
+                                                 std::optional<int> start,
+                                                 std::optional<int> end);
+    std::expected<std::vector<storage::CardAdminRecord>, DbError> list_cards();
+    std::expected<int, DbError> get_failed_attempts(std::string_view card);
+    std::expected<void, DbError> set_failed_attempts(std::string_view card, int amount);
+
 private:
     struct SqliteDeleter
     { void operator()(sqlite3* db) const noexcept; };

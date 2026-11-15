@@ -15,28 +15,23 @@
 #include "crypto.hpp"
 #include "enums.hpp"
 
-#include <string>
 #include <optional>
+#include <string>
 
-struct CardRecord final {
-    CardRecord(std::string card_number, std::string card_holder, std::string pin, std::string sal, 
-            std::optional<std::string> account, UserRole rol, bool blocked, bool expired, int failed_atmps) 
-    : number{std::move(card_number)},
-      holder{std::move(card_holder)},
-      pin_hash{std::move(pin)},
-      salt{std::move(sal)},
-      account_id{std::move(account)},
-      role{rol},
-      is_blocked{blocked},
-      is_expired{expired},
-      failed_attempts{failed_atmps}
-    {}
+struct CardRecord final
+{
+    CardRecord(std::string card_number, std::string card_holder, std::string pin,
+               std::string sal, std::optional<std::string> account, UserRole rol,
+               bool blocked, bool expired, int failed_atmps)
+        : number{std::move(card_number)}, holder{std::move(card_holder)},
+          pin_hash{std::move(pin)}, salt{std::move(sal)}, account_id{std::move(account)},
+          role{rol}, is_blocked{blocked}, is_expired{expired},
+          failed_attempts{failed_atmps}
+    { }
 
     CardRecord(std::string card_number, bool blocked, bool expired)
-    : number{std::move(card_number)},
-      is_blocked{blocked},
-      is_expired{expired}
-    {}
+        : number{std::move(card_number)}, is_blocked{blocked}, is_expired{expired}
+    { }
 
     CardRecord(const CardRecord&) = default;
     CardRecord& operator=(const CardRecord&) = default;
@@ -55,11 +50,15 @@ struct CardRecord final {
     std::string salt;
 
     std::optional<std::string> account_id;
-    
+
     UserRole role = UserRole::None;
 
     bool is_blocked{false};
     bool is_expired{false};
+    bool is_revoked{false};
+
+    std::optional<int> access_window_start;
+    std::optional<int> access_window_end;
 
     int failed_attempts{};
 };

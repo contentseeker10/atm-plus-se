@@ -95,27 +95,21 @@ public:
         SavingsAccount* from_linked_savings, SavingsAccount* to_linked_savings,
         std::uint64_t nonce, std::string_view idempotency_key = "");
 
-    std::expected<void, LedgerError> withdraw_with_overdraft(CheckingAccount& checking,
-                                                             SavingsAccount& savings,
-                                                             std::int64_t amount_cents,
-                                                             std::uint64_t nonce,
-                                                             std::string_view idempotency_key = "");
+    std::expected<void, LedgerError> withdraw_with_overdraft(
+        CheckingAccount& checking, SavingsAccount& savings, std::int64_t amount_cents,
+        std::uint64_t nonce, std::string_view idempotency_key = "");
 
-    std::expected<void, LedgerError> deposit_with_overflow(CheckingAccount& checking,
-                                                           SavingsAccount& savings,
-                                                           std::int64_t amount_cents,
-                                                           std::uint64_t nonce,
-                                                           std::string_view idempotency_key = "");
+    std::expected<void, LedgerError> deposit_with_overflow(
+        CheckingAccount& checking, SavingsAccount& savings, std::int64_t amount_cents,
+        std::uint64_t nonce, std::string_view idempotency_key = "");
 
-    std::expected<void, LedgerError> withdraw_from_account(Account& account,
-                                                           std::int64_t amount_cents,
-                                                           std::uint64_t nonce,
-                                                           std::string_view idempotency_key = "");
+    std::expected<void, LedgerError> withdraw_from_account(
+        Account& account, std::int64_t amount_cents, std::uint64_t nonce,
+        std::string_view idempotency_key = "");
 
-    std::expected<void, LedgerError> deposit_to_account(Account& account,
-                                                        std::int64_t amount_cents,
-                                                        std::uint64_t nonce,
-                                                        std::string_view idempotency_key = "");
+    std::expected<void, LedgerError> deposit_to_account(
+        Account& account, std::int64_t amount_cents, std::uint64_t nonce,
+        std::string_view idempotency_key = "");
 
     std::expected<std::int64_t, LedgerError> accrue_interest(SavingsAccount& savings,
                                                              std::uint64_t nonce,
@@ -132,8 +126,7 @@ public:
         const std::function<Account*(const std::string&)>& resolve_account,
         const std::function<bool(const Account&, const Account&)>& persist_accounts = {});
 
-    ApsRunResult run_aps(std::chrono::system_clock::time_point now,
-                         DatabaseManager& db);
+    ApsRunResult run_aps(std::chrono::system_clock::time_point now, DatabaseManager& db);
 
     InvCheckReport inv_check(const std::vector<const Account*>& accounts,
                              std::int64_t vault_cash_cents,

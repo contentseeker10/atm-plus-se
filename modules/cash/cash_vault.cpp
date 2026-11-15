@@ -102,7 +102,7 @@ namespace
         }
         return plan;
     }
-}
+} // namespace
 
 CashVault::CashVault(std::map<Denomination, Cassette> cassettes)
     : _cassettes(std::move(cassettes))

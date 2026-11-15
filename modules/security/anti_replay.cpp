@@ -31,10 +31,7 @@ bool AntiReplayManager::is_request_unique(std::string_view idemp_key)
     if (idemp_key.empty()) { return false; }
 
     std::unique_lock lock(_mtx);
-    if (_seen_idemp_keys.find(idemp_key) != _seen_idemp_keys.end())
-    {
-        return false;
-    }
+    if (_seen_idemp_keys.find(idemp_key) != _seen_idemp_keys.end()) { return false; }
 
     const auto now = clock::now();
     if (_seen_idemp_keys.size() >= kAutoPurgeThreshold)

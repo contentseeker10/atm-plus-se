@@ -28,6 +28,20 @@
 #include <unordered_map>
 #include <vector>
 
+struct AuditFilter
+{
+    std::optional<std::string> since;
+    std::optional<std::string> until;
+    std::optional<std::string> card;
+    std::optional<std::string> event;
+
+    bool empty() const
+    {
+        return !since.has_value() && !until.has_value() && !card.has_value() &&
+               !event.has_value();
+    }
+};
+
 struct ChainVerification
 {
     bool ok{};
@@ -59,6 +73,9 @@ public:
     std::vector<LedgerEntry> entries() const;
     std::vector<LedgerEntry> entries_from(std::size_t start_index) const;
     std::vector<LedgerEntry> entries_page(std::size_t offset, std::size_t limit) const;
+    std::vector<LedgerEntry> entries_page_filtered(std::size_t offset, std::size_t limit,
+                                                   const AuditFilter& filter) const;
+    static bool matches_filter(const LedgerEntry& entry, const AuditFilter& filter);
     void for_each_entry(const std::function<void(const LedgerEntry&)>& fn) const;
 
     std::shared_ptr<const std::string> get_last_hash() const noexcept;

@@ -34,4 +34,4 @@ namespace storage
     std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row);
     std::expected<CardRecord, DbError> read_card_limited(sqlite3_stmt* row);
     LedgerEntry read_ledger_entry(sqlite3_stmt* row);
-}
+} // namespace storage

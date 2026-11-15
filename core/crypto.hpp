@@ -26,4 +26,4 @@ namespace crypto
     bool constant_time_compare(std::string_view a, std::string_view b) noexcept;
     void secure_zero(void* data, std::size_t size) noexcept;
     void secure_zero(std::string& str) noexcept;
-}
+} // namespace crypto

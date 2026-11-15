@@ -107,8 +107,8 @@ public:
         std::string_view idempotency_key = "",
         std::optional<std::uint64_t> incoming_nonce = std::nullopt);
     std::expected<DepositResult, AtmError> process_deposit(
-        const std::vector<Denomination>& bills, std::string_view account_type = "Checking",
-        std::string_view idempotency_key = "",
+        const std::vector<Denomination>& bills,
+        std::string_view account_type = "Checking", std::string_view idempotency_key = "",
         std::optional<std::uint64_t> incoming_nonce = std::nullopt);
     std::expected<TransferResult, AtmError> process_transfer(
         std::string_view from_account, std::string_view to_account,
@@ -127,12 +127,26 @@ public:
     std::expected<CustomerApsRunResult, AtmError> run_customer_aps();
     std::expected<void, AtmError> delete_customer_aps_rule(std::string_view rule_id);
     std::expected<std::vector<LedgerEntry>, AtmError> get_audit_entries(
-        std::size_t offset = 0, std::size_t limit = 0);
+        std::size_t offset = 0, std::size_t limit = 0,
+        const AuditFilter& filter = AuditFilter{});
+    std::expected<std::string, AtmError> export_audit_csv(const AuditFilter& filter);
+
+    std::expected<std::vector<storage::CardAdminRecord>, AtmError> admin_list_cards();
+    std::expected<void, AtmError> admin_issue_card(
+        std::string_view card_number, std::string_view holder, std::string_view pin,
+        UserRole role, std::optional<std::string> checking_account_id,
+        std::optional<int> window_start, std::optional<int> window_end);
+    std::expected<void, AtmError> admin_revoke_card(std::string_view card_number);
+    std::expected<void, AtmError> admin_set_card_role(std::string_view card_number,
+                                                      UserRole role);
+    std::expected<void, AtmError> admin_set_card_window(std::string_view card_number,
+                                                        std::optional<int> window_start,
+                                                        std::optional<int> window_end);
     std::expected<ChainVerification, AtmError> verify_audit_integrity();
     bool is_audit_entry_tampered(const LedgerEntry& entry) const;
     std::expected<void, AtmError> simulate_audit_tamper(bool restore = false);
 
-    std::expected<void, AtmError> open_vault_door();
+    std::expected<void, AtmError> open_vault_door(bool forced = false);
     std::expected<void, AtmError> close_vault_door();
     std::expected<void, AtmError> _append_security_event(
         std::string_view operation_type,
@@ -143,12 +157,12 @@ public:
 
     std::expected<CardRecord, AtmError> validate_card(std::string_view card);
     std::expected<CardRecord, AtmError> authenticate_card(std::string_view pin);
-    std::expected<void, AtmError>       validate_session();
+    std::expected<void, AtmError> validate_session();
 
     std::optional<std::string> get_active_session_id() const;
-    std::optional<CardRecord>  get_active_card()       const;
-    UserRole                   get_active_role()       const;
-    int                        get_remaining_pin_attempts(std::string_view card) const;
+    std::optional<CardRecord> get_active_card() const;
+    UserRole get_active_role() const;
+    int get_remaining_pin_attempts(std::string_view card) const;
 
     std::string_view get_current_state_name() const
     { return _current_state->get_state_name(); }
@@ -168,15 +182,15 @@ private:
         std::optional<CashVault> next_vault, const std::vector<const Account*>& accounts,
         std::uint64_t nonce, std::size_t audit_mark);
 
-    std::shared_ptr<DatabaseManager>   _db;
-    std::shared_ptr<AuditLog>          _audit_log;
-    std::shared_ptr<LedgerService>     _ledger;
+    std::shared_ptr<DatabaseManager> _db;
+    std::shared_ptr<AuditLog> _audit_log;
+    std::shared_ptr<LedgerService> _ledger;
     std::shared_ptr<AntiReplayManager> _anti_replay;
 
     std::optional<SessionContext> _active_session{std::nullopt};
 
-    std::unique_ptr<IAtmState>   _current_state{std::make_unique<IdleState>()};
-    std::unique_ptr<CashVault>   _vault;
+    std::unique_ptr<IAtmState> _current_state{std::make_unique<IdleState>()};
+    std::unique_ptr<CashVault> _vault;
     std::unique_ptr<AuthService> _auth_service;
 
     std::uint64_t _tx_nonce{0};

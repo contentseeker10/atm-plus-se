@@ -20,7 +20,8 @@ export const ENGINEER_VIEWS = Object.freeze({
   AUTH_KEY: 'AUTH_KEY',
   VAULT: 'VAULT',
   REPLENISH: 'REPLENISH',
-  AUDIT: 'AUDIT'
+  AUDIT: 'AUDIT',
+  ADMIN: 'ADMIN'
 });
 
 const initialState = {
@@ -44,6 +45,8 @@ const initialState = {
   lastReceipt: null,
   vaultStatus: null,
   auditRecords: [],
+  auditFilter: { since: '', until: '', card: '', event: '' },
+  adminCards: [],
   apsRules: [],
   integrityStatus: null,
   timeoutRemainingSec: 0,

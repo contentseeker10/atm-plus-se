@@ -16,10 +16,10 @@
 #include "sql.hpp"
 #include "sqlite_utils.hpp"
 
-#include <access_control/card.hpp>
 #include "accounting/ledger.hpp"
 #include "accounts/account.hpp"
 #include "cash/cassette.hpp"
+#include <access_control/card.hpp>
 
 #include <sqlite3.h>
 
@@ -185,57 +185,63 @@ namespace storage
         }
     }
 
-    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card) {
+    std::expected<CardRecord, DbError> load_card(sqlite3* db, std::string_view card)
+    {
         auto stmt = prepare(db, sql::kSelectCardRecord);
-        if (!stmt) {
-            return std::unexpected(stmt.error());
-        }
+        if (!stmt) { return std::unexpected(stmt.error()); }
 
-        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK) {
+        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK)
+        {
             return std::unexpected(to_db_error(rc));
         }
 
-        switch (const int rc = sqlite3_step(stmt->get())) {
-            case SQLITE_ROW:  return read_card(stmt->get());
-            case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
-            default:          return std::unexpected(to_db_error(rc));
+        switch (const int rc = sqlite3_step(stmt->get()))
+        {
+        case SQLITE_ROW: return read_card(stmt->get());
+        case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
+        default: return std::unexpected(to_db_error(rc));
         }
     }
 
-    std::expected<CardRecord, DbError> load_card_limited(sqlite3* db, std::string_view card) {
+    std::expected<CardRecord, DbError> load_card_limited(sqlite3* db,
+                                                         std::string_view card)
+    {
         auto stmt = prepare(db, sql::kSelectLimitedCardRecord);
-        if (!stmt) {
-            return std::unexpected(stmt.error());
-        }
+        if (!stmt) { return std::unexpected(stmt.error()); }
 
-        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK) {
+        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK)
+        {
             return std::unexpected(to_db_error(rc));
         }
 
-        switch (const int rc = sqlite3_step(stmt->get())) {
-            case SQLITE_ROW:  return read_card_limited(stmt->get());
-            case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
-            default:          return std::unexpected(to_db_error(rc));
+        switch (const int rc = sqlite3_step(stmt->get()))
+        {
+        case SQLITE_ROW: return read_card_limited(stmt->get());
+        case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
+        default: return std::unexpected(to_db_error(rc));
         }
     }
 
-    std::expected<void, DbError> block_card(sqlite3* db, std::string_view card) {
+    std::expected<void, DbError> block_card(sqlite3* db, std::string_view card)
+    {
         auto stmt = prepare(db, sql::kUpdateBlocked);
-        if (!stmt) {
-            return std::unexpected(stmt.error());
+        if (!stmt) { return std::unexpected(stmt.error()); }
+
+        if (const int rc = sqlite3_bind_int64(stmt->get(), 1, 1); rc != SQLITE_OK)
+        {
+            return std::unexpected(to_db_error(rc));
+        }
+        if (const int rc = bind_text(stmt->get(), 2, card); rc != SQLITE_OK)
+        {
+            return std::unexpected(to_db_error(rc));
         }
 
-        if (const int rc = sqlite3_bind_int64(stmt->get(), 1, 1); rc != SQLITE_OK) {
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
+        {
             return std::unexpected(to_db_error(rc));
         }
-        if (const int rc = bind_text(stmt->get(), 2, card); rc != SQLITE_OK) {
-            return std::unexpected(to_db_error(rc));
-        }
-
-        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE) {
-            return std::unexpected(to_db_error(rc));
-        }
-        if (sqlite3_changes64(db) == 0) {
+        if (sqlite3_changes64(db) == 0)
+        {
             return std::unexpected(DbError::RecordNotFound);
         }
 
@@ -263,48 +269,196 @@ namespace storage
         return {};
     }
 
-    std::expected<int, DbError> get_failed_attempts(sqlite3* db, std::string_view card) {
+    std::expected<int, DbError> get_failed_attempts(sqlite3* db, std::string_view card)
+    {
         auto stmt = prepare(db, sql::kSelectAttempts);
-        if (!stmt) {
-            return std::unexpected(stmt.error());
-        }
+        if (!stmt) { return std::unexpected(stmt.error()); }
 
-        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK) {
+        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK)
+        {
             return std::unexpected(to_db_error(rc));
         }
 
-        switch (const int rc = sqlite3_step(stmt->get())) {
-            case SQLITE_ROW:  return static_cast<int>(sqlite3_column_int64(stmt->get(), 0));
-            case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
-            default:          return std::unexpected(to_db_error(rc));
+        switch (const int rc = sqlite3_step(stmt->get()))
+        {
+        case SQLITE_ROW: return static_cast<int>(sqlite3_column_int64(stmt->get(), 0));
+        case SQLITE_DONE: return std::unexpected(DbError::RecordNotFound);
+        default: return std::unexpected(to_db_error(rc));
         }
     }
 
-    std::expected<void, DbError> set_failed_attempts(sqlite3* db, std::string_view card, int amount) {
+    std::expected<void, DbError> set_failed_attempts(sqlite3* db, std::string_view card,
+                                                     int amount)
+    {
         auto stmt = prepare(db, sql::kUpdateAttempts);
-        if (!stmt) {
-            return std::unexpected(stmt.error());
-        }
+        if (!stmt) { return std::unexpected(stmt.error()); }
 
-        if (const int rc = sqlite3_bind_int64(stmt->get(), 1, amount); rc != SQLITE_OK) {
+        if (const int rc = sqlite3_bind_int64(stmt->get(), 1, amount); rc != SQLITE_OK)
+        {
             return std::unexpected(to_db_error(rc));
         }
 
-        if (const int rc = bind_text(stmt->get(), 2, card); rc != SQLITE_OK) {
+        if (const int rc = bind_text(stmt->get(), 2, card); rc != SQLITE_OK)
+        {
             return std::unexpected(to_db_error(rc));
         }
 
-        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE) {
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
+        {
             return std::unexpected(to_db_error(rc));
         }
-        if (sqlite3_changes64(db) == 0) {
+        if (sqlite3_changes64(db) == 0)
+        {
             return std::unexpected(DbError::RecordNotFound);
         }
 
         return {};
     }
 
-    std::expected<void, DbError> insert_ledger_entry(sqlite3* db, const LedgerEntry& entry)
+    namespace
+    {
+        int bind_optional_int(sqlite3_stmt* stmt, int index,
+                              std::optional<int> value) noexcept
+        {
+            if (!value.has_value()) return sqlite3_bind_null(stmt, index);
+            return sqlite3_bind_int64(stmt, index, static_cast<sqlite3_int64>(*value));
+        }
+    } // namespace
+
+    std::expected<void, DbError> revoke_card(sqlite3* db, std::string_view card)
+    {
+        auto stmt = prepare(db, sql::kRevokeCard);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
+            return std::unexpected(to_db_error(rc));
+        if (sqlite3_changes64(db) == 0) return std::unexpected(DbError::RecordNotFound);
+        return {};
+    }
+
+    std::expected<void, DbError> insert_card_admin(sqlite3* db, const CardRecord& card,
+                                                   const std::string& salt)
+    {
+        auto stmt = prepare(db, sql::kInsertCardAdmin);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        if (const int rc = bind_text(stmt->get(), 1, card.number); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(stmt->get(), 2, card.holder); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(stmt->get(), 3, card.pin_hash); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(stmt->get(), 4, salt); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = sqlite3_bind_int64(stmt->get(), 5,
+                                              card.role == UserRole::Engineer ? 1 : 0);
+            rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (card.account_id.has_value())
+        {
+            if (const int rc = bind_text(stmt->get(), 6, *card.account_id);
+                rc != SQLITE_OK)
+                return std::unexpected(to_db_error(rc));
+        }
+        else if (const int rc = sqlite3_bind_null(stmt->get(), 6); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_optional_int(stmt->get(), 7, card.access_window_start);
+            rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_optional_int(stmt->get(), 8, card.access_window_end);
+            rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
+            return std::unexpected(to_db_error(rc));
+        return {};
+    }
+
+    std::expected<void, DbError> set_card_role(sqlite3* db, std::string_view card,
+                                               UserRole role)
+    {
+        auto stmt = prepare(db, sql::kSetCardRole);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        if (const int rc =
+                sqlite3_bind_int64(stmt->get(), 1, role == UserRole::Engineer ? 1 : 0);
+            rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(stmt->get(), 2, card); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
+            return std::unexpected(to_db_error(rc));
+        if (sqlite3_changes64(db) == 0) return std::unexpected(DbError::RecordNotFound);
+        return {};
+    }
+
+    std::expected<void, DbError> set_card_window(sqlite3* db, std::string_view card,
+                                                 std::optional<int> start,
+                                                 std::optional<int> end)
+    {
+        if ((start.has_value() != end.has_value()))
+            return std::unexpected(DbError::ConstraintViolation);
+        auto stmt = prepare(db, sql::kSetCardWindow);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        if (const int rc = bind_optional_int(stmt->get(), 1, start); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_optional_int(stmt->get(), 2, end); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(stmt->get(), 3, card); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
+            return std::unexpected(to_db_error(rc));
+        if (sqlite3_changes64(db) == 0) return std::unexpected(DbError::RecordNotFound);
+        return {};
+    }
+
+    std::expected<std::vector<CardAdminRecord>, DbError> list_cards(sqlite3* db)
+    {
+        auto stmt = prepare(db, sql::kListCards);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        std::vector<CardAdminRecord> cards;
+        while (true)
+        {
+            const int rc = sqlite3_step(stmt->get());
+            if (rc == SQLITE_DONE) break;
+            if (rc != SQLITE_ROW) return std::unexpected(to_db_error(rc));
+
+            CardAdminRecord rec;
+            rec.number = column_text(stmt->get(), 0);
+            rec.holder = column_text(stmt->get(), 1);
+            switch (static_cast<int>(sqlite3_column_int64(stmt->get(), 2)))
+            {
+            case 0: rec.role = UserRole::Customer; break;
+            case 1: rec.role = UserRole::Engineer; break;
+            default: rec.role = UserRole::None; break;
+            }
+            rec.is_blocked = sqlite3_column_int64(stmt->get(), 3) != 0;
+            rec.is_expired = sqlite3_column_int64(stmt->get(), 4) != 0;
+            rec.is_revoked = sqlite3_column_int64(stmt->get(), 5) != 0;
+            rec.failed_attempts = static_cast<int>(sqlite3_column_int64(stmt->get(), 6));
+            rec.window_start = sqlite3_column_type(stmt->get(), 7) == SQLITE_NULL
+                                   ? std::nullopt
+                                   : std::optional<int>{static_cast<int>(
+                                         sqlite3_column_int64(stmt->get(), 7))};
+            rec.window_end = sqlite3_column_type(stmt->get(), 8) == SQLITE_NULL
+                                 ? std::nullopt
+                                 : std::optional<int>{static_cast<int>(
+                                       sqlite3_column_int64(stmt->get(), 8))};
+            rec.checking_account_id = column_optional_text(stmt->get(), 9);
+            cards.push_back(std::move(rec));
+        }
+        return cards;
+    }
+
+    std::expected<void, DbError> insert_ledger_entry(sqlite3* db,
+                                                     const LedgerEntry& entry)
     {
         auto stmt = prepare(db, sql::kInsertLedgerEntry);
         if (!stmt) return std::unexpected(stmt.error());
@@ -322,7 +476,8 @@ namespace storage
             return std::unexpected(to_db_error(rc));
         if (const int rc = bind_text(s, 6, entry.operation_type); rc != SQLITE_OK)
             return std::unexpected(to_db_error(rc));
-        if (const int rc = sqlite3_bind_int64(s, 7, static_cast<std::int64_t>(entry.nonce));
+        if (const int rc =
+                sqlite3_bind_int64(s, 7, static_cast<std::int64_t>(entry.nonce));
             rc != SQLITE_OK)
             return std::unexpected(to_db_error(rc));
         if (const int rc = bind_text(s, 8, entry.prev_hash); rc != SQLITE_OK)
@@ -352,4 +507,4 @@ namespace storage
 
         return loaded;
     }
-}
+} // namespace storage

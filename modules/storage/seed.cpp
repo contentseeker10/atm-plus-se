@@ -152,10 +152,9 @@ namespace storage
             }
             return 2;
         }
-    }
+    } // namespace
 
-    std::expected<void, DbError> seed_demo_data(sqlite3* db,
-                                                std::string_view hmac_secret)
+    std::expected<void, DbError> seed_demo_data(sqlite3* db, std::string_view hmac_secret)
     {
         const auto existing_entries = load_ledger_entries(db);
         if (!existing_entries) return std::unexpected(existing_entries.error());
@@ -166,9 +165,9 @@ namespace storage
 
         for (const auto& s : kSavings)
         {
-            const auto inserted = insert(db, sql::kInsertSavingsSeed, s.account_id,
-                                         s.client_id, s.balance_cents,
-                                         s.annual_interest_rate, s.minimum_balance_cents);
+            const auto inserted =
+                insert(db, sql::kInsertSavingsSeed, s.account_id, s.client_id,
+                       s.balance_cents, s.annual_interest_rate, s.minimum_balance_cents);
             if (!inserted) return std::unexpected(inserted.error());
             if (record_genesis && *inserted && s.balance_cents > 0)
             {
@@ -214,18 +213,17 @@ namespace storage
 
         for (const auto& cassette : kCassettes)
         {
-            const auto inserted =
-                insert(db, sql::kInsertCassetteSeed,
-                       static_cast<std::int64_t>(cassette.denomination),
-                       cassette.bill_count, cassette.capacity);
+            const auto inserted = insert(db, sql::kInsertCassetteSeed,
+                                         static_cast<std::int64_t>(cassette.denomination),
+                                         cassette.bill_count, cassette.capacity);
             if (!inserted) return std::unexpected(inserted.error());
             if (record_genesis && *inserted && cassette.bill_count > 0)
             {
                 LedgerEntry entry;
                 entry.debit_account_id = std::string(ATM_VAULT_ACCOUNT_ID);
                 entry.credit_account_id = std::string(BANK_TREASURY_ACCOUNT_ID);
-                entry.amount_cents =
-                    static_cast<std::int64_t>(cassette.denomination) * cassette.bill_count;
+                entry.amount_cents = static_cast<std::int64_t>(cassette.denomination) *
+                                     cassette.bill_count;
                 entry.operation_type = "REPLENISHMENT";
                 entry.nonce = ++nonce;
                 genesis.push_back(std::move(entry));
@@ -247,4 +245,4 @@ namespace storage
 
         return {};
     }
-}
+} // namespace storage

@@ -54,15 +54,15 @@ VALUES ('{0}', 'ivan', '{1}', '{2}', 0, 0, 0, 0, 'CHK-1');
                                         card_number, pin_hash, salt);
 
     const bool seeded =
-        db->execute_transaction(
-              [&sql](sqlite3* raw) { return storage::exec(raw, sql.c_str()).has_value(); })
+        db->execute_transaction([&sql](sqlite3* raw)
+                                { return storage::exec(raw, sql.c_str()).has_value(); })
             .has_value();
     CHECK(seeded);
 
     auto audit = std::make_shared<AuditLog>(db, "test-hmac-secret");
     AuthService direct_auth{db, audit};
-    AtmController atm{std::make_unique<CashVault>(std::map<Denomination, Cassette>{}), db, audit,
-                      std::make_unique<AuthService>(db, audit)};
+    AtmController atm{std::make_unique<CashVault>(std::map<Denomination, Cassette>{}), db,
+                      audit, std::make_unique<AuthService>(db, audit)};
 
     const auto inserted = atm.process_insert_card(card_number);
     CHECK(inserted.has_value());
@@ -104,10 +104,14 @@ VALUES ('{0}', 'ivan', '{1}', '{2}', 0, 0, 0, 0, 'CHK-1');
     CHECK(!retry_auth.has_value());
     CHECK(retry_auth.error() == AuthError::CardBlocked);
 
-    CHECK(audit->size() == 1);
+    CHECK(audit->size() == 4);
     const auto entries = audit->entries();
-    CHECK(entries.size() == 1);
-    CHECK(entries[0].operation_type == "CARD_BLOCKED");
+    CHECK(entries.size() == 4);
+    CHECK(entries[0].operation_type == "CARD_ACCESS_DENIED");
+    CHECK(entries[1].operation_type == "CARD_ACCESS_DENIED");
+    CHECK(entries[2].operation_type == "CARD_BLOCKED");
+    CHECK(entries[3].operation_type == "CARD_ACCESS_DENIED");
+    CHECK(entries[2].debit_account_id == card_number);
     const auto integrity = audit->verify_integrity_chain();
     CHECK(integrity.has_value() && integrity->ok);
 
@@ -316,27 +320,20 @@ TEST(anti_replay)
 
 TEST(security_hardening)
 {
-    begin("Security hardening: secure_zero, env engineer key override and audit tamper check");
+    begin("Security hardening: secure_zero, env engineer key override and audit tamper "
+          "check");
 
     std::string secret = "super-sensitive-pin-1234";
     const std::size_t secret_len = secret.size();
     crypto::secure_zero(secret);
-    for (std::size_t i = 0; i < secret_len; ++i)
-    {
-        CHECK(secret[i] == '\0');
-    }
+    for (std::size_t i = 0; i < secret_len; ++i) { CHECK(secret[i] == '\0'); }
 
     auto db = std::make_shared<DatabaseManager>(":memory:");
     auto audit = std::make_shared<AuditLog>(db, "test-hmac-secret");
     auto replay = std::make_shared<AntiReplayManager>();
     auto ledger = std::make_shared<LedgerService>(audit, replay);
-    AtmController atm{
-        std::make_unique<CashVault>(std::map<Denomination, Cassette>{}),
-        db,
-        audit,
-        std::make_unique<AuthService>(db, audit),
-        ledger
-    };
+    AtmController atm{std::make_unique<CashVault>(std::map<Denomination, Cassette>{}), db,
+                      audit, std::make_unique<AuthService>(db, audit), ledger};
 
 #ifdef _WIN32
     _putenv_s("ATM_ENGINEER_MASTER_KEY", "");
@@ -379,7 +376,8 @@ TEST(security_hardening)
 
 TEST(performance_optimizations)
 {
-    begin("Performance optimizations: anti-replay auto-purge, audit pagination and sqlite stmt cache");
+    begin("Performance optimizations: anti-replay auto-purge, audit pagination and "
+          "sqlite stmt cache");
 
     AntiReplayManager replay;
     replay.register_session("sess-perf", 10);
@@ -402,7 +400,9 @@ TEST(performance_optimizations)
     CheckingAccount chk{"CHK-1", "yosyp", 50000, 0, 1000000, "SAV-1"};
     for (int i = 1; i <= 5; ++i)
     {
-        CHECK(sut.ledger.transfer(chk, sav, i * 1000, "TRANSFER", static_cast<std::uint64_t>(i)).has_value());
+        CHECK(sut.ledger
+                  .transfer(chk, sav, i * 1000, "TRANSFER", static_cast<std::uint64_t>(i))
+                  .has_value());
     }
 
     const auto page1 = sut.audit->entries_page(1, 2);
@@ -415,19 +415,17 @@ TEST(performance_optimizations)
 
     const auto tail_page = sut.audit->entries_page(4, 10);
     CHECK(tail_page.size() == 1);
-    if (!tail_page.empty())
-    {
-        CHECK(tail_page[0].amount_cents == 5000);
-    }
+    if (!tail_page.empty()) { CHECK(tail_page[0].amount_cents == 5000); }
     CHECK(sut.audit->entries_page(10, 5).empty());
 
     std::int64_t total_amount = 0;
     std::size_t visited = 0;
-    sut.audit->for_each_entry([&](const LedgerEntry& e)
-    {
-        total_amount += e.amount_cents;
-        ++visited;
-    });
+    sut.audit->for_each_entry(
+        [&](const LedgerEntry& e)
+        {
+            total_amount += e.amount_cents;
+            ++visited;
+        });
     CHECK(visited == 5);
     CHECK(total_amount == 15000);
 
@@ -436,19 +434,18 @@ TEST(performance_optimizations)
     CHECK(verified->checked_records == 5);
 
     auto db = std::make_shared<DatabaseManager>(":memory:");
-    const bool seeded =
-        db->execute_transaction(
-              [](sqlite3* raw)
-              {
-                  return storage::exec(raw, R"sql(
+    const bool seeded = db->execute_transaction(
+                              [](sqlite3* raw)
+                              {
+                                  return storage::exec(raw, R"sql(
 INSERT INTO accounts (account_id, client_id, type, balance_cents, client_min_cents, overflow_max_cents)
 VALUES ('CHK-CACHE', 'yosyp', 'checking', 10000, 0, 100000);
 INSERT INTO cards (card_number, card_holder, pin_hash, salt, role, checking_account_id)
 VALUES ('4000000000000099', 'yosyp', 'hash', 'salt', 0, 'CHK-CACHE');
 )sql")
-                      .has_value();
-              })
-            .has_value();
+                                      .has_value();
+                              })
+                            .has_value();
     CHECK(seeded);
 
     for (int i = 0; i < 25; ++i)
@@ -468,7 +465,8 @@ VALUES ('4000000000000099', 'yosyp', 'hash', 'salt', 0, 'CHK-CACHE');
 
 TEST(controller_qa_fixes_and_service_ops)
 {
-    begin("Controller QA fixes: anti-replay, transfer protection, APS, tamper lock and service ops");
+    begin("Controller QA fixes: anti-replay, transfer protection, APS, tamper lock and "
+          "service ops");
 
     constexpr std::string_view card1 = "4111000000000001";
     constexpr std::string_view card2 = "4111000000000002";
@@ -498,9 +496,10 @@ VALUES (10000, 10, 100), (5000, 10, 100);
 )sql",
                                         card1, hash1, card2, hash2, eng_card, eng_hash);
 
-    const bool seeded = db->execute_transaction([&sql](sqlite3* raw)
-                                                { return storage::exec(raw, sql.c_str()).has_value(); })
-                            .has_value();
+    const bool seeded =
+        db->execute_transaction([&sql](sqlite3* raw)
+                                { return storage::exec(raw, sql.c_str()).has_value(); })
+            .has_value();
     CHECK(seeded);
 
     std::map<Denomination, Cassette> cassettes;
@@ -518,8 +517,8 @@ VALUES (10000, 10, 100), (5000, 10, 100);
     auto audit = std::make_shared<AuditLog>(db, "test-hmac-secret");
     auto replay = std::make_shared<AntiReplayManager>();
     auto ledger = std::make_shared<LedgerService>(audit, replay);
-    AtmController atm{std::make_unique<CashVault>(std::move(cassettes)), db, audit,
-                      std::make_unique<AuthService>(db, audit), ledger, replay};
+    AtmController atm{std::make_unique<CashVault>(std::move(cassettes)), db,     audit,
+                      std::make_unique<AuthService>(db, audit),          ledger, replay};
 
     CHECK(atm.process_insert_card(card1).has_value());
     CHECK(atm.process_enter_pin("1234").has_value());
@@ -540,18 +539,21 @@ VALUES (10000, 10, 100), (5000, 10, 100);
     CHECK(wd_stale_nonce.error() == AtmError::ReplayAttackDetected);
     CHECK((*db->load_account("CHK-A"))->get_balance() == 40000);
 
-    const auto dep1 = atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-1", 2);
+    const auto dep1 =
+        atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-1", 2);
     CHECK(dep1.has_value());
     CHECK(dep1 && dep1->accounts.checking_balance_cents == 50000);
     CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 10);
 
-    const auto dep_dup_key = atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-1", 3);
+    const auto dep_dup_key =
+        atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-1", 3);
     CHECK(!dep_dup_key.has_value());
     CHECK(dep_dup_key.error() == AtmError::ReplayAttackDetected);
     CHECK((*db->load_account("CHK-A"))->get_balance() == 50000);
     CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 10);
 
-    const auto dep_stale_nonce = atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-2", 2);
+    const auto dep_stale_nonce =
+        atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-2", 2);
     CHECK(!dep_stale_nonce.has_value());
     CHECK(dep_stale_nonce.error() == AtmError::ReplayAttackDetected);
     CHECK((*db->load_account("CHK-A"))->get_balance() == 50000);
@@ -572,7 +574,8 @@ VALUES (10000, 10, 100), (5000, 10, 100);
     CHECK((*db->load_account("CHK-B"))->get_balance() == 100000);
     CHECK((*db->load_account("SAV-B"))->get_balance() == 35000);
 
-    const auto rule = atm.create_customer_aps_rule("Savings", "Checking", 5000, true, 3600);
+    const auto rule =
+        atm.create_customer_aps_rule("Savings", "Checking", 5000, true, 3600);
     CHECK(rule.has_value());
     const auto rules_list = atm.get_customer_aps_rules();
     CHECK(rules_list.has_value() && rules_list->size() == 1);
@@ -586,10 +589,7 @@ VALUES (10000, 10, 100), (5000, 10, 100);
         CHECK(aps_run->accounts.checking_balance_cents == 15000);
     }
 
-    if (rule)
-    {
-        CHECK(atm.delete_customer_aps_rule(rule->rule_id).has_value());
-    }
+    if (rule) { CHECK(atm.delete_customer_aps_rule(rule->rule_id).has_value()); }
     const auto rules_after = atm.get_customer_aps_rules();
     CHECK(rules_after.has_value() && rules_after->empty());
 
@@ -603,7 +603,8 @@ VALUES (10000, 10, 100), (5000, 10, 100);
 
     CHECK(atm.process_insert_card(eng_card).has_value());
     CHECK(atm.process_enter_pin("0000").has_value());
-    CHECK(atm.process_replace_cassette(Denomination::D_100, 0).error() == AtmError::VaultAccessDenied);
+    CHECK(atm.process_replace_cassette(Denomination::D_100, 0).error() ==
+          AtmError::VaultAccessDenied);
     CHECK(atm.process_open_vault("ENG-MASTER-KEY-2026").has_value());
     CHECK(atm.process_replace_cassette(Denomination::D_100, 0).has_value());
     CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 0);

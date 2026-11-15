@@ -21,10 +21,10 @@ SavingsAccount::SavingsAccount(std::string account_id, std::string client_id,
                                std::int64_t minimum_balance_cents)
     : Account(std::move(account_id), std::move(client_id), balance_cents),
       _annual_interest_rate(annual_interest_rate),
-      _interest_rate_bps(std::isfinite(annual_interest_rate)
-                             ? static_cast<std::int32_t>(
-                                   std::llround(annual_interest_rate * 10000.0))
-                             : 0),
+      _interest_rate_bps(
+          std::isfinite(annual_interest_rate)
+              ? static_cast<std::int32_t>(std::llround(annual_interest_rate * 10000.0))
+              : 0),
       _minimum_balance_cents(minimum_balance_cents)
 {
     if (!SavingsAccount::validate_invariants())

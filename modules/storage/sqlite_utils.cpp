@@ -27,9 +27,7 @@ namespace storage
         {
             using is_transparent = void;
             std::size_t operator()(std::string_view sv) const noexcept
-            {
-                return std::hash<std::string_view>{}(sv);
-            }
+            { return std::hash<std::string_view>{}(sv); }
         };
 
         using ConnectionStmtCache =
@@ -39,7 +37,7 @@ namespace storage
 
         std::mutex g_stmt_cache_mtx;
         std::unordered_map<sqlite3*, ConnectionStmtCache> g_stmt_cache;
-    }
+    } // namespace
 
     void StatementDeleter::operator()(sqlite3_stmt* stmt) const noexcept
     {
@@ -47,8 +45,8 @@ namespace storage
 
         sqlite3* db = sqlite3_db_handle(stmt);
         const char* sql = sqlite3_sql(stmt);
-        const bool clean =
-            (sqlite3_reset(stmt) == SQLITE_OK) && (sqlite3_clear_bindings(stmt) == SQLITE_OK);
+        const bool clean = (sqlite3_reset(stmt) == SQLITE_OK) &&
+                           (sqlite3_clear_bindings(stmt) == SQLITE_OK);
 
         if (clean && db != nullptr && sql != nullptr)
         {
@@ -64,8 +62,7 @@ namespace storage
                 }
             }
             catch (...)
-            {
-            }
+            { }
         }
 
         sqlite3_finalize(stmt);
@@ -120,8 +117,8 @@ namespace storage
 
     int bind_text(sqlite3_stmt* stmt, int index, std::string_view text) noexcept
     {
-        return sqlite3_bind_text64(stmt, index, text.data(), text.size(), SQLITE_TRANSIENT,
-                                   SQLITE_UTF8);
+        return sqlite3_bind_text64(stmt, index, text.data(), text.size(),
+                                   SQLITE_TRANSIENT, SQLITE_UTF8);
     }
 
     std::string column_text(sqlite3_stmt* stmt, int column)
@@ -152,9 +149,6 @@ namespace storage
             }
         }
 
-        for (auto& [sql, stmt] : to_finalize)
-        {
-            sqlite3_finalize(stmt);
-        }
+        for (auto& [sql, stmt] : to_finalize) { sqlite3_finalize(stmt); }
     }
-}
+} // namespace storage
