@@ -381,7 +381,7 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
         return std::unexpected(session.error());
     if (!_ledger || !_audit_log) return std::unexpected(AtmError::InternalError);
 
-    const auto plan = _vault->calculate_dispense(amount_cents);
+    auto plan = _vault->calculate_dispense(amount_cents);
     if (!plan) return std::unexpected(to_atm_error(plan.error()));
 
     CashVault next_vault{*_vault};
@@ -431,8 +431,8 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
         is_checking
             ? std::max<std::int64_t>(0, savings_before - accounts->savings->get_balance())
             : 0;
-    return WithdrawResult{*plan, overdraft_covered, make_account_snapshot(*accounts),
-                          target->get_balance()};
+    return WithdrawResult{std::move(*plan), overdraft_covered,
+                          make_account_snapshot(*accounts), target->get_balance()};
 }
 
 std::expected<DepositResult, AtmError> AtmController::process_deposit(
@@ -630,7 +630,8 @@ std::expected<CustomerAccountSnapshot, AtmError> AtmController::get_customer_acc
     return make_account_snapshot(*accounts);
 }
 
-std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entries()
+std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entries(
+    std::size_t offset, std::size_t limit)
 {
     std::unique_lock lock(_mtx);
 
@@ -638,7 +639,11 @@ std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entri
         return std::unexpected(session.error());
     if (!_audit_log) return std::unexpected(AtmError::InternalError);
 
-    return _audit_log->entries();
+    if (offset == 0 && limit == 0)
+    {
+        return _audit_log->entries();
+    }
+    return _audit_log->entries_page(offset, limit);
 }
 
 std::expected<ChainVerification, AtmError> AtmController::verify_audit_integrity()

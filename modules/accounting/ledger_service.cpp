@@ -467,14 +467,12 @@ InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accou
         report.passed_checks.push_back("hash chain and HMAC links intact");
     }
 
-    const std::vector<LedgerEntry> log = _audit_log->entries();
-
     std::map<std::string, std::int64_t> net;
-    for (const auto& e : log)
+    _audit_log->for_each_entry([&net](const LedgerEntry& e)
     {
-        net[std::string(e.debit_account_id)] -= e.amount_cents;
-        net[std::string(e.credit_account_id)] += e.amount_cents;
-    }
+        net[e.debit_account_id] -= e.amount_cents;
+        net[e.credit_account_id] += e.amount_cents;
+    });
 
     report.passed_checks.push_back("journal is zero-sum (sum of postings = 0)");
 

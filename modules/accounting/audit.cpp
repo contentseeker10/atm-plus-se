@@ -177,6 +177,7 @@ std::expected<ChainVerification, CryptoError> AuditLog::verify_integrity_chain()
 
     ChainVerification result;
     result.ok = true;
+    result.checked_records = _entries.size();
 
     try
     {
@@ -225,6 +226,26 @@ std::vector<LedgerEntry> AuditLog::entries_from(std::size_t start_index) const
     if (start_index >= _entries.size()) { return {}; }
     return std::vector<LedgerEntry>(_entries.cbegin() + static_cast<std::ptrdiff_t>(start_index),
                                     _entries.cend());
+}
+
+std::vector<LedgerEntry> AuditLog::entries_page(std::size_t offset, std::size_t limit) const
+{
+    std::lock_guard lock(_mtx);
+    if (offset >= _entries.size()) { return {}; }
+    const std::size_t available = _entries.size() - offset;
+    const std::size_t count = (limit == 0 || limit > available) ? available : limit;
+    const auto begin_it = _entries.cbegin() + static_cast<std::ptrdiff_t>(offset);
+    return std::vector<LedgerEntry>(begin_it, begin_it + static_cast<std::ptrdiff_t>(count));
+}
+
+void AuditLog::for_each_entry(const std::function<void(const LedgerEntry&)>& fn) const
+{
+    if (!fn) { return; }
+    std::lock_guard lock(_mtx);
+    for (const auto& entry : _entries)
+    {
+        fn(entry);
+    }
 }
 
 std::shared_ptr<const std::string> AuditLog::get_last_hash() const noexcept

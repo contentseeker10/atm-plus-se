@@ -23,8 +23,10 @@
 #include "crypto.hpp"
 #include "db.hpp"
 
+#include "storage/operations.hpp"
 #include "storage/sqlite_utils.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <format>
 #include <map>
@@ -371,6 +373,95 @@ TEST(security_hardening)
     const auto broken_chain = sut.audit->verify_integrity_chain();
     CHECK(broken_chain.has_value() && !broken_chain->ok);
     CHECK(broken_chain->first_broken_index == 0);
+
+    done();
+}
+
+TEST(performance_optimizations)
+{
+    begin("Performance optimizations: anti-replay auto-purge, audit pagination and sqlite stmt cache");
+
+    AntiReplayManager replay;
+    replay.register_session("sess-perf", 10);
+    CHECK(!replay.validate_and_consume("sess-perf", 10));
+    CHECK(replay.validate_and_consume("sess-perf", 11));
+    replay.reset_session("sess-perf");
+    CHECK(!replay.validate_and_consume("sess-perf", 12));
+
+    CHECK(!replay.is_request_unique(""));
+    for (std::size_t i = 0; i <= AntiReplayManager::kAutoPurgeThreshold + 16; ++i)
+    {
+        CHECK(replay.is_request_unique(std::format("k-{}", i)));
+    }
+    CHECK(!replay.is_request_unique("k-0"));
+    replay.purge_expired_keys(std::chrono::seconds{-1});
+    CHECK(replay.is_request_unique("k-0"));
+
+    Sut sut;
+    SavingsAccount sav{"SAV-1", "yosyp", 0, 0.0, 0};
+    CheckingAccount chk{"CHK-1", "yosyp", 50000, 0, 1000000, "SAV-1"};
+    for (int i = 1; i <= 5; ++i)
+    {
+        CHECK(sut.ledger.transfer(chk, sav, i * 1000, "TRANSFER", static_cast<std::uint64_t>(i)).has_value());
+    }
+
+    const auto page1 = sut.audit->entries_page(1, 2);
+    CHECK(page1.size() == 2);
+    if (page1.size() == 2)
+    {
+        CHECK(page1[0].amount_cents == 2000);
+        CHECK(page1[1].amount_cents == 3000);
+    }
+
+    const auto tail_page = sut.audit->entries_page(4, 10);
+    CHECK(tail_page.size() == 1);
+    if (!tail_page.empty())
+    {
+        CHECK(tail_page[0].amount_cents == 5000);
+    }
+    CHECK(sut.audit->entries_page(10, 5).empty());
+
+    std::int64_t total_amount = 0;
+    std::size_t visited = 0;
+    sut.audit->for_each_entry([&](const LedgerEntry& e)
+    {
+        total_amount += e.amount_cents;
+        ++visited;
+    });
+    CHECK(visited == 5);
+    CHECK(total_amount == 15000);
+
+    const auto verified = sut.audit->verify_integrity_chain();
+    CHECK(verified.has_value() && verified->ok);
+    CHECK(verified->checked_records == 5);
+
+    auto db = std::make_shared<DatabaseManager>(":memory:");
+    const bool seeded =
+        db->execute_transaction(
+              [](sqlite3* raw)
+              {
+                  return storage::exec(raw, R"sql(
+INSERT INTO accounts (account_id, client_id, type, balance_cents, client_min_cents, overflow_max_cents)
+VALUES ('CHK-CACHE', 'yosyp', 'checking', 10000, 0, 100000);
+INSERT INTO cards (card_number, card_holder, pin_hash, salt, role, checking_account_id)
+VALUES ('4000000000000099', 'yosyp', 'hash', 'salt', 0, 'CHK-CACHE');
+)sql")
+                      .has_value();
+              })
+            .has_value();
+    CHECK(seeded);
+
+    for (int i = 0; i < 25; ++i)
+    {
+        const std::string acc_id = "CHK-CACHE";
+        const std::string card_id = "4000000000000099";
+        auto acc = db->load_account(acc_id);
+        CHECK(acc.has_value() && (*acc)->get_balance() == 10000);
+        CHECK(db->set_failed_attempts(card_id, i % 3).has_value());
+        auto attempts = db->get_failed_attempts(card_id);
+        CHECK(attempts.has_value() && *attempts == (i % 3));
+    }
+    db.reset();
 
     done();
 }

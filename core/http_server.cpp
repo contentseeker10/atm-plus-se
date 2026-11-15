@@ -800,7 +800,28 @@ void HttpServerAdapter::_register_routes()
     {
         if (!verify_engineer_headers(*_atm_controller, req, res)) return;
 
-        const auto entries = _atm_controller->get_audit_entries();
+        std::size_t offset = 0;
+        std::size_t limit = 0;
+        if (req.has_param("offset"))
+        {
+            const auto parsed = parse_int64_text(req.get_param_value("offset"));
+            if (!parsed || *parsed < 0)
+            {
+                return send_atm_error(res, AtmError::InvalidAmount);
+            }
+            offset = static_cast<std::size_t>(*parsed);
+        }
+        if (req.has_param("limit"))
+        {
+            const auto parsed = parse_int64_text(req.get_param_value("limit"));
+            if (!parsed || *parsed < 0)
+            {
+                return send_atm_error(res, AtmError::InvalidAmount);
+            }
+            limit = static_cast<std::size_t>(*parsed);
+        }
+
+        const auto entries = _atm_controller->get_audit_entries(offset, limit);
         if (!entries) return send_atm_error(res, entries.error());
 
         json records = json::array();
@@ -808,7 +829,7 @@ void HttpServerAdapter::_register_routes()
         {
             const auto& e = (*entries)[i - 1];
             records.push_back({
-                {"id", i},
+                {"id", offset + i},
                 {"timestamp", e.timestamp},
                 {"event", e.operation_type},
                 {"detail", e.debit_account_id + "->" + e.credit_account_id},
@@ -828,16 +849,14 @@ void HttpServerAdapter::_register_routes()
         const auto verification = _atm_controller->verify_audit_integrity();
         if (!verification) return send_atm_error(res, verification.error());
 
-        const auto entries = _atm_controller->get_audit_entries();
-        if (!entries) return send_atm_error(res, entries.error());
-
         const std::string detail = verification->ok
-            ? "SHA-256 + HMAC chain verified (" + std::to_string(entries->size()) + " records intact)."
+            ? "SHA-256 + HMAC chain verified (" + std::to_string(verification->checked_records) +
+                  " records intact)."
             : verification->detail;
 
         send_json(res, 200, {
             {"valid", verification->ok},
-            {"checkedRecords", entries->size()},
+            {"checkedRecords", verification->checked_records},
             {"brokenRecordId", verification->ok ? json(nullptr) : json(verification->first_broken_index + 1)},
             {"detail", detail}
         });
