@@ -5,6 +5,10 @@
 *.pdf
 temp/
 
+### DB ###
+
+*.db
+
 ### C++ ###
 # Prerequisites
 *.d
