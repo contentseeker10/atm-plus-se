@@ -600,7 +600,9 @@ class AtmSimulatorApp {
         api.runAutoPayments(token)
       );
       const executed = res.executed ?? 0;
-      const failures = res.failures ?? 0;
+      const failureCount = Array.isArray(res.failures)
+        ? res.failures.length
+        : Number(res.failures) || 0;
       this._syncWalletAccountsHint(store.getState().cardNumber, res.accounts || []);
       store.setState({
         accounts: res.accounts || store.getState().accounts,
@@ -608,8 +610,8 @@ class AtmSimulatorApp {
         isBusy: false,
         busyMessage: '',
         alert: {
-          type: failures > 0 ? 'warn' : 'success',
-          message: `Auto-payment run completed: ${executed} executed, ${failures} failed.`
+          type: failureCount > 0 ? 'warn' : 'success',
+          message: `Auto-payment run completed: ${executed} executed, ${failureCount} failed.`
         }
       });
     } catch (err) {
