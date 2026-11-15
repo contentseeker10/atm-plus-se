@@ -381,7 +381,7 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
         return std::unexpected(session.error());
     if (!_ledger || !_audit_log) return std::unexpected(AtmError::InternalError);
 
-    const auto plan = _vault->calculate_dispense(amount_cents);
+    auto plan = _vault->calculate_dispense(amount_cents);
     if (!plan) return std::unexpected(to_atm_error(plan.error()));
 
     CashVault next_vault{*_vault};
@@ -431,8 +431,8 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
         is_checking
             ? std::max<std::int64_t>(0, savings_before - accounts->savings->get_balance())
             : 0;
-    return WithdrawResult{*plan, overdraft_covered, make_account_snapshot(*accounts),
-                          target->get_balance()};
+    return WithdrawResult{std::move(*plan), overdraft_covered,
+                          make_account_snapshot(*accounts), target->get_balance()};
 }
 
 std::expected<DepositResult, AtmError> AtmController::process_deposit(

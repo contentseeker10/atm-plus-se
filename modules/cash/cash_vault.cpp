@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -43,6 +44,7 @@ namespace
         const std::map<Denomination, Cassette>& cassettes, std::size_t target_units)
     {
         std::vector<BillBundle> bundles;
+        bundles.reserve(cassettes.size() * 8);
         for (auto it = cassettes.cbegin(); it != cassettes.cend(); ++it)
         {
             const auto bill_units =
@@ -68,21 +70,22 @@ namespace
     {
         const auto bundles = split_into_bundles(cassettes, target_units);
 
-        std::vector<int> fewest(target_units + 1, kUnreachable);
+        const std::size_t stride = target_units + 1;
+        std::vector<int> fewest(stride, kUnreachable);
         fewest[0] = 0;
-        std::vector<std::vector<bool>> taken(bundles.size(),
-                                             std::vector<bool>(target_units + 1, false));
+        std::vector<std::uint8_t> taken(bundles.size() * stride, 0);
 
         for (std::size_t i = 0; i < bundles.size(); ++i)
         {
             const auto& bundle = bundles[i];
+            const std::size_t row_offset = i * stride;
             for (std::size_t value = target_units; value >= bundle.units; --value)
             {
                 const int previous = fewest[value - bundle.units];
                 if (previous != kUnreachable && previous + bundle.bills < fewest[value])
                 {
                     fewest[value] = previous + bundle.bills;
-                    taken[i][value] = true;
+                    taken[row_offset + value] = 1;
                 }
             }
         }
@@ -93,13 +96,13 @@ namespace
         std::size_t remaining = target_units;
         for (std::size_t i = bundles.size(); i-- > 0;)
         {
-            if (!taken[i][remaining]) continue;
+            if (taken[i * stride + remaining] == 0) continue;
             plan[bundles[i].denomination] += bundles[i].bills;
             remaining -= bundles[i].units;
         }
         return plan;
     }
-} // namespace
+}
 
 CashVault::CashVault(std::map<Denomination, Cassette> cassettes)
     : _cassettes(std::move(cassettes))
