@@ -137,19 +137,18 @@ TEST(savings_interest_and_persistent_aps)
     CHECK(sav2.get_balance() == 210000);
 
     auto db = std::make_shared<DatabaseManager>(":memory:");
-    const bool seeded =
-        db->execute_transaction(
-              [](sqlite3* raw)
-              {
-                  return storage::exec(raw, R"sql(
+    const bool seeded = db->execute_transaction(
+                              [](sqlite3* raw)
+                              {
+                                  return storage::exec(raw, R"sql(
 INSERT INTO accounts (account_id, client_id, type, balance_cents, annual_interest_rate, minimum_balance_cents)
 VALUES ('SAV-1', 'alice', 'savings', 10000, 0.025, 0);
 INSERT INTO accounts (account_id, client_id, type, balance_cents, client_min_cents, overflow_max_cents, linked_savings_id)
 VALUES ('CHK-1', 'alice', 'checking', 30000, 0, 1000000, 'SAV-1');
 )sql")
-                      .has_value();
-              })
-            .has_value();
+                                      .has_value();
+                              })
+                            .has_value();
     CHECK(seeded);
 
     auto audit = std::make_shared<AuditLog>(db, "test-hmac-secret");

@@ -18,7 +18,7 @@
 #include <filesystem>
 #include <memory>
 
-inline constexpr auto HOST      = "0.0.0.0";
+inline constexpr auto HOST = "0.0.0.0";
 inline constexpr auto VIEW_PATH = "../../../view";
 
 class AtmController;
@@ -30,10 +30,11 @@ public:
         : _port{port}, _atm_controller{std::move(controller)}
     { }
 
-    void start() { 
+    void start()
+    {
         _mount_frontend();
         _register_routes();
-        _server.listen(HOST, _port); 
+        _server.listen(HOST, _port);
     }
     void stop() noexcept { _server.stop(); }
 

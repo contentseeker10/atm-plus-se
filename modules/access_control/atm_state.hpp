@@ -37,9 +37,11 @@ public:
     virtual std::expected<void, AtmError> open_vault(AtmController&, std::string_view)
     { return std::unexpected(AtmError::InvalidStateTransition); }
 
-    [[nodiscard]] virtual std::expected<void, AtmError> verify_customer_access(AtmController&) const
+    [[nodiscard]] virtual std::expected<void, AtmError> verify_customer_access(
+        AtmController&) const
     { return std::unexpected(AtmError::Unauthorized); }
-    [[nodiscard]] virtual std::expected<void, AtmError> verify_engineer_access(AtmController&) const
+    [[nodiscard]] virtual std::expected<void, AtmError> verify_engineer_access(
+        AtmController&) const
     { return std::unexpected(AtmError::Unauthorized); }
 };
 

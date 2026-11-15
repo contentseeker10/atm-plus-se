@@ -534,12 +534,12 @@ TEST(atm_fsm_service_selection_and_engineer_audit)
 
     const std::string customer_hash = crypto::sha256_hex("1234", "salt123");
     const std::string engineer_hash = crypto::sha256_hex("0000", "salt456");
-    const std::string update_cards_sql = std::format(R"sql(
+    const std::string update_cards_sql =
+        std::format(R"sql(
 UPDATE cards SET pin_hash = '{0}', salt = 'salt123', role = 0 WHERE card_number = '{1}';
 UPDATE cards SET pin_hash = '{2}', salt = 'salt456', role = 1 WHERE card_number = '{3}';
 )sql",
-                                                     customer_hash, kCustomerCard,
-                                                     engineer_hash, kEngineerCard);
+                    customer_hash, kCustomerCard, engineer_hash, kEngineerCard);
 
     const bool updated =
         f.db->execute_transaction(

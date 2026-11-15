@@ -40,7 +40,7 @@ namespace
         }
         return LedgerError::AuditFailure;
     }
-}
+} // namespace
 
 LedgerService::LedgerService(std::shared_ptr<AuditLog> audit_log,
                              std::shared_ptr<AntiReplayManager> anti_replay)
@@ -50,9 +50,7 @@ LedgerService::LedgerService(std::shared_ptr<AuditLog> audit_log,
 bool LedgerService::integrity_ok() const noexcept { return !_integrity_compromised; }
 
 void LedgerService::set_integrity_compromised(bool compromised) noexcept
-{
-    _integrity_compromised = compromised;
-}
+{ _integrity_compromised = compromised; }
 
 LedgerEntry LedgerService::make_entry(std::string_view debit_id,
                                       std::string_view credit_id,
@@ -251,8 +249,8 @@ std::expected<TransferOutcome, LedgerError> LedgerService::transfer_with_protect
                                      chk_from->get_account_id(), needed,
                                      "OVERDRAFT_COVERAGE", nonce));
     }
-    entries.push_back(make_entry(from.get_account_id(), to.get_account_id(),
-                                 amount_cents, "TRANSFER", nonce));
+    entries.push_back(make_entry(from.get_account_id(), to.get_account_id(), amount_cents,
+                                 "TRANSFER", nonce));
     if (excess > 0)
     {
         entries.push_back(make_entry(chk_to->get_account_id(),
@@ -413,9 +411,9 @@ std::expected<void, LedgerError> LedgerService::withdraw_from_account(
         return std::unexpected(map_account_error(w.error()));
     }
 
-    if (auto r = append_entries({make_entry(account.get_account_id(),
-                                            ATM_VAULT_ACCOUNT_ID, amount_cents,
-                                            "WITHDRAWAL", nonce)});
+    if (auto r =
+            append_entries({make_entry(account.get_account_id(), ATM_VAULT_ACCOUNT_ID,
+                                       amount_cents, "WITHDRAWAL", nonce)});
         !r)
     {
         std::ignore = account.deposit(amount_cents);
@@ -438,9 +436,9 @@ std::expected<void, LedgerError> LedgerService::deposit_to_account(
         return std::unexpected(map_account_error(d.error()));
     }
 
-    if (auto r = append_entries({make_entry(ATM_VAULT_ACCOUNT_ID,
-                                            account.get_account_id(), amount_cents,
-                                            "DEPOSIT", nonce)});
+    if (auto r =
+            append_entries({make_entry(ATM_VAULT_ACCOUNT_ID, account.get_account_id(),
+                                       amount_cents, "DEPOSIT", nonce)});
         !r)
     {
         std::ignore = account.withdraw(amount_cents);
@@ -464,9 +462,9 @@ std::expected<std::int64_t, LedgerError> LedgerService::accrue_interest(
         return std::unexpected(map_account_error(d.error()));
     }
 
-    if (auto r = append_entries({make_entry(BANK_TREASURY_ACCOUNT_ID,
-                                            savings.get_account_id(), interest,
-                                            "INTEREST", nonce)});
+    if (auto r =
+            append_entries({make_entry(BANK_TREASURY_ACCOUNT_ID, savings.get_account_id(),
+                                       interest, "INTEREST", nonce)});
         !r)
     {
         std::ignore = savings.withdraw(interest);
@@ -493,8 +491,7 @@ std::expected<void, LedgerError> LedgerService::register_aps_rule(ApsRule rule)
     return {};
 }
 
-std::vector<ApsRule> LedgerService::get_aps_rules(
-    std::string_view payer_account_id) const
+std::vector<ApsRule> LedgerService::get_aps_rules(std::string_view payer_account_id) const
 {
     std::unique_lock lock(_aps_mtx);
     if (payer_account_id.empty()) { return _aps_rules; }
@@ -502,10 +499,7 @@ std::vector<ApsRule> LedgerService::get_aps_rules(
     std::vector<ApsRule> filtered;
     for (const auto& rule : _aps_rules)
     {
-        if (rule.payer_account_id == payer_account_id)
-        {
-            filtered.push_back(rule);
-        }
+        if (rule.payer_account_id == payer_account_id) { filtered.push_back(rule); }
     }
     return filtered;
 }
@@ -514,8 +508,8 @@ bool LedgerService::remove_aps_rule(std::string_view rule_id)
 {
     if (rule_id.empty()) { return false; }
     std::unique_lock lock(_aps_mtx);
-    const std::size_t removed = std::erase_if(
-        _aps_rules, [rule_id](const ApsRule& r) { return r.rule_id == rule_id; });
+    const std::size_t removed = std::erase_if(_aps_rules, [rule_id](const ApsRule& r)
+                                              { return r.rule_id == rule_id; });
     return removed > 0;
 }
 
@@ -641,11 +635,12 @@ InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accou
     }
 
     std::map<std::string, std::int64_t> net;
-    _audit_log->for_each_entry([&net](const LedgerEntry& e)
-    {
-        net[e.debit_account_id] -= e.amount_cents;
-        net[e.credit_account_id] += e.amount_cents;
-    });
+    _audit_log->for_each_entry(
+        [&net](const LedgerEntry& e)
+        {
+            net[e.debit_account_id] -= e.amount_cents;
+            net[e.credit_account_id] += e.amount_cents;
+        });
 
     report.passed_checks.push_back("journal is zero-sum (sum of postings = 0)");
 

@@ -50,12 +50,11 @@ private:
     {
         using is_transparent = void;
         std::size_t operator()(std::string_view sv) const noexcept
-        {
-            return std::hash<std::string_view>{}(sv);
-        }
+        { return std::hash<std::string_view>{}(sv); }
     };
 
-    void _purge_expired_keys_unlocked(clock::time_point now, std::chrono::seconds max_age);
+    void _purge_expired_keys_unlocked(clock::time_point now,
+                                      std::chrono::seconds max_age);
 
     std::unordered_map<std::string, clock::time_point, StringHash, std::equal_to<>>
         _seen_idemp_keys;

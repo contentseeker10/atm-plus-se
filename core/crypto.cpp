@@ -34,7 +34,7 @@ namespace crypto
             }
             return hex_str;
         }
-    }
+    } // namespace
 
     std::vector<uint8_t> random_bytes(std::size_t size)
     {
@@ -70,10 +70,9 @@ namespace crypto
         salted_payload.reserve(salt.size() + data.size());
         salted_payload.append(salt);
         salted_payload.append(data);
-        const bool ok =
-            EVP_Q_digest(nullptr, "SHA256", nullptr, salted_payload.data(),
-                         salted_payload.size(), hash.data(), &out_len) == 1 &&
-            out_len == hash.size();
+        const bool ok = EVP_Q_digest(nullptr, "SHA256", nullptr, salted_payload.data(),
+                                     salted_payload.size(), hash.data(), &out_len) == 1 &&
+                        out_len == hash.size();
         secure_zero(salted_payload);
         if (!ok)
         {
@@ -107,17 +106,11 @@ namespace crypto
 
     void secure_zero(void* data, std::size_t size) noexcept
     {
-        if (data != nullptr && size > 0)
-        {
-            OPENSSL_cleanse(data, size);
-        }
+        if (data != nullptr && size > 0) { OPENSSL_cleanse(data, size); }
     }
 
     void secure_zero(std::string& str) noexcept
     {
-        if (!str.empty())
-        {
-            OPENSSL_cleanse(str.data(), str.size());
-        }
+        if (!str.empty()) { OPENSSL_cleanse(str.data(), str.size()); }
     }
-}
+} // namespace crypto

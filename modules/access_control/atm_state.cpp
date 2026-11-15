@@ -17,23 +17,17 @@ std::expected<void, AtmError> IdleState::insert_card(AtmController& ctx,
                                                      std::string_view card_number)
 {
     auto record = ctx.validate_card(card_number);
-    if (!record) {
-        return std::unexpected(record.error());
-    }
+    if (!record) { return std::unexpected(record.error()); }
     ctx.start_session(record.value(), false);
     ctx.transition_to(std::make_unique<CardInsertedState>());
     return {};
 }
 
 std::expected<void, AtmError> IdleState::verify_customer_access(AtmController&) const
-{
-    return std::unexpected(AtmError::NoActiveSession);
-}
+{ return std::unexpected(AtmError::NoActiveSession); }
 
 std::expected<void, AtmError> IdleState::verify_engineer_access(AtmController&) const
-{
-    return std::unexpected(AtmError::NoActiveSession);
-}
+{ return std::unexpected(AtmError::NoActiveSession); }
 
 std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& ctx,
                                                            std::string_view pin)
@@ -41,7 +35,9 @@ std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& ctx,
     auto record = ctx.authenticate_card(pin);
     if (!record)
     {
-        if (record.error() == AtmError::CardBlocked || record.error() == AtmError::MaxAttemptsExceeded) {
+        if (record.error() == AtmError::CardBlocked ||
+            record.error() == AtmError::MaxAttemptsExceeded)
+        {
             ctx.end_session();
         }
         return std::unexpected(record.error());
@@ -65,18 +61,16 @@ std::expected<void, AtmError> CardInsertedState::enter_pin(AtmController& ctx,
     return {};
 }
 
-std::expected<void, AtmError> CardInsertedState::eject_card(AtmController& ctx) {
+std::expected<void, AtmError> CardInsertedState::eject_card(AtmController& ctx)
+{
     ctx.end_session();
     return {};
 }
 
-std::expected<void, AtmError> CustomerSessionState::select_service(
-    AtmController& ctx, ServiceType service)
+std::expected<void, AtmError> CustomerSessionState::select_service(AtmController& ctx,
+                                                                   ServiceType service)
 {
-    if (auto session = ctx.validate_session(); !session)
-    {
-        return session;
-    }
+    if (auto session = ctx.validate_session(); !session) { return session; }
     if (service == ServiceType::EngineerMaintenance)
     {
         return std::unexpected(AtmError::Unauthorized);
@@ -84,7 +78,8 @@ std::expected<void, AtmError> CustomerSessionState::select_service(
     return {};
 }
 
-std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& ctx) {
+std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& ctx)
+{
     ctx.end_session();
     return {};
 }
@@ -92,10 +87,7 @@ std::expected<void, AtmError> CustomerSessionState::eject_card(AtmController& ct
 std::expected<void, AtmError> CustomerSessionState::verify_customer_access(
     AtmController& ctx) const
 {
-    if (auto session = ctx.validate_session(); !session)
-    {
-        return session;
-    }
+    if (auto session = ctx.validate_session(); !session) { return session; }
     if (ctx.get_active_role() != UserRole::Customer)
     {
         return std::unexpected(AtmError::Unauthorized);
@@ -106,10 +98,7 @@ std::expected<void, AtmError> CustomerSessionState::verify_customer_access(
 std::expected<void, AtmError> EngineerSessionState::open_vault(
     AtmController& ctx, std::string_view engineer_key)
 {
-    if (auto session = ctx.validate_session(); !session)
-    {
-        return session;
-    }
+    if (auto session = ctx.validate_session(); !session) { return session; }
     if (!ctx.verify_engineer_key(engineer_key))
     {
         return std::unexpected(AtmError::VaultAccessDenied);
@@ -117,7 +106,8 @@ std::expected<void, AtmError> EngineerSessionState::open_vault(
     return ctx.open_vault_door();
 }
 
-std::expected<void, AtmError> EngineerSessionState::eject_card(AtmController& ctx) {
+std::expected<void, AtmError> EngineerSessionState::eject_card(AtmController& ctx)
+{
     ctx.end_session();
     return {};
 }
@@ -125,10 +115,7 @@ std::expected<void, AtmError> EngineerSessionState::eject_card(AtmController& ct
 std::expected<void, AtmError> EngineerSessionState::verify_engineer_access(
     AtmController& ctx) const
 {
-    if (auto session = ctx.validate_session(); !session)
-    {
-        return session;
-    }
+    if (auto session = ctx.validate_session(); !session) { return session; }
     if (ctx.get_active_role() != UserRole::Engineer)
     {
         return std::unexpected(AtmError::Unauthorized);
