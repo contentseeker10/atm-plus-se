@@ -35,7 +35,7 @@ class AuditLog
 {
 public:
     AuditLog(std::shared_ptr<DatabaseManager> db, std::string hmac_secret_key);
-    ~AuditLog() = default;
+    ~AuditLog() noexcept;
 
     AuditLog(const AuditLog&) = delete;
     AuditLog& operator=(const AuditLog&) = delete;

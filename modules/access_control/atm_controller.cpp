@@ -27,6 +27,7 @@
 #include "storage/operations.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <optional>
 #include <string>
@@ -675,7 +676,10 @@ std::expected<void, AtmError> AtmController::close_vault_door()
 
 bool AtmController::verify_engineer_key(std::string_view engineer_key) const noexcept
 {
-    return crypto::constant_time_compare(engineer_key, kDefaultEngineerKey);
+    const char* env_key = std::getenv("ATM_ENGINEER_MASTER_KEY");
+    const std::string_view expected =
+        (env_key != nullptr && *env_key != '\0') ? std::string_view{env_key} : kDefaultEngineerKey;
+    return crypto::constant_time_compare(engineer_key, expected);
 }
 
 std::expected<void, AtmError> AtmController::require_role(UserRole role)

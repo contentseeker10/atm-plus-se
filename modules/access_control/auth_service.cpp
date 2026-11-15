@@ -16,7 +16,10 @@
 
 #include "storage/operations.hpp"
 
+#include <sqlite3.h>
+
 #include <algorithm>
+#include <optional>
 
 std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view card, bool auth) {
     auto record = _load_card(card, !auth);
@@ -38,7 +41,9 @@ std::expected<CardRecord, AuthError> AuthService::authenticate_card(std::string_
         return std::unexpected(record.error());
     }
     auto hash = crypto::sha256_hex(pin, record->salt);
-    if (!crypto::constant_time_compare(hash, record->pin_hash)) {
+    const bool pin_ok = crypto::constant_time_compare(hash, record->pin_hash);
+    crypto::secure_zero(hash);
+    if (!pin_ok) {
         auto inc_failed = _inc_failed_attempts(card);
         if (!inc_failed) {
             return std::unexpected(inc_failed.error());
@@ -86,21 +91,44 @@ std::expected<void, AuthError> AuthService::_block_card(std::string_view card) {
     return {};
 }
 
-std::expected<int, AuthError> AuthService::_inc_failed_attempts(std::string_view card) {
-    auto current_failed = _db->get_failed_attempts(card);
-    if (!current_failed) {
-        return std::unexpected(to_auth_error(current_failed.error()));
-    }
-
-    auto attempts = current_failed.value();
-
-    if (attempts == kMaxFailedAttempts) {
-        return std::unexpected(AuthError::MaxAttemptsExceeded);
-    }
-
-    auto result = _db->set_failed_attempts(card, ++attempts);
-    if (!result) {
-        return std::unexpected(to_auth_error(result.error()));
+std::expected<int, AuthError> AuthService::_inc_failed_attempts(std::string_view card)
+{
+    int attempts = 0;
+    std::optional<DbError> tx_err;
+    auto tx_res = _db->execute_transaction([&](sqlite3* raw)
+    {
+        auto current_failed = storage::get_failed_attempts(raw, card);
+        if (!current_failed)
+        {
+            tx_err = current_failed.error();
+            return false;
+        }
+        attempts = current_failed.value();
+        if (attempts >= kMaxFailedAttempts)
+        {
+            return true;
+        }
+        ++attempts;
+        auto set_res = storage::set_failed_attempts(raw, card, attempts);
+        if (!set_res)
+        {
+            tx_err = set_res.error();
+            return false;
+        }
+        if (attempts == kMaxFailedAttempts)
+        {
+            auto blk_res = storage::block_card(raw, card);
+            if (!blk_res)
+            {
+                tx_err = blk_res.error();
+                return false;
+            }
+        }
+        return true;
+    });
+    if (!tx_res)
+    {
+        return std::unexpected(to_auth_error(tx_err.value_or(tx_res.error())));
     }
     return attempts;
 }

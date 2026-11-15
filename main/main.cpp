@@ -27,6 +27,7 @@
 #include "storage/operations.hpp"
 #include "storage/seed.hpp"
 
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <print>
@@ -56,12 +57,16 @@ int main()
         log("Initializing Database Manager...");
         auto db = std::make_shared<DatabaseManager>(DB_PATH);
 
+        const char* env_hmac = std::getenv("ATM_HMAC_SECRET");
+        const std::string hmac_secret =
+            (env_hmac != nullptr && *env_hmac != '\0') ? std::string{env_hmac} : HMAC_SECRET;
+
         log("Seeding Database and Loading Cash Vault...");
         std::map<Denomination, Cassette> cassettes;
         const auto seeded = db->execute_transaction(
             [&](sqlite3* raw)
             {
-                if (!storage::seed_demo_data(raw, HMAC_SECRET)) return false;
+                if (!storage::seed_demo_data(raw, hmac_secret)) return false;
                 auto loaded = storage::load_cassettes(raw);
                 if (!loaded) return false;
                 cassettes = std::move(*loaded);
@@ -75,7 +80,7 @@ int main()
         auto vault = std::make_unique<CashVault>(std::move(cassettes));
 
         log("Initializing Audit Log...");
-        auto audit = std::make_shared<AuditLog>(db, HMAC_SECRET);
+        auto audit = std::make_shared<AuditLog>(db, hmac_secret);
         if (!audit->load_from_database())
         {
             log("Failed to load audit log from database.", true);
