@@ -571,9 +571,11 @@ void HttpServerAdapter::_register_routes()
         const auto amount = read_int64(*body, "amount");
         if (!amount) return send_atm_error(res, AtmError::InvalidAmount);
 
+        const std::string account_type =
+            read_string(*body, "accountType", "account").value_or("Checking");
         const auto card = _atm_controller->get_active_card();
 
-        const auto wd = _atm_controller->process_withdraw(*amount);
+        const auto wd = _atm_controller->process_withdraw(*amount, account_type);
         if (!wd)
         {
             return send_atm_error(res, wd.error());
@@ -592,15 +594,20 @@ void HttpServerAdapter::_register_routes()
             }
         }
 
+        const bool is_savings = (account_type == "Savings" || account_type == "savings" ||
+                                 account_type == wd->accounts.savings_id);
+        const std::string& receipt_account =
+            is_savings ? wd->accounts.savings_id : wd->accounts.checking_id;
+
         const std::string pan = card ? card->number : "";
-        const json receipt = build_receipt(pan, "WITHDRAWAL", wd->accounts.checking_id, *amount,
-                                           wd->accounts.checking_balance_cents,
+        const json receipt = build_receipt(pan, "WITHDRAWAL", receipt_account, *amount,
+                                           wd->target_new_balance_cents,
                                            wd->overdraft_covered_cents, 0);
 
         send_json(res, 200, {
             {"status", "ok"},
             {"dispensedBills", dispensed_bills},
-            {"newBalance", wd->accounts.checking_balance_cents},
+            {"newBalance", wd->target_new_balance_cents},
             {"overdraftCoveredCents", wd->overdraft_covered_cents},
             {"accounts", build_accounts_json(wd->accounts)},
             {"receipt", receipt}
@@ -617,26 +624,33 @@ void HttpServerAdapter::_register_routes()
         const auto bills = parse_bills_payload(*body);
         if (!bills) return send_atm_error(res, AtmError::InvalidAmount);
 
+        const std::string account_type =
+            read_string(*body, "accountType", "account").value_or("Checking");
         const auto card = _atm_controller->get_active_card();
 
-        const auto dep = _atm_controller->process_deposit(*bills);
+        const auto dep = _atm_controller->process_deposit(*bills, account_type);
         if (!dep)
         {
             return send_atm_error(res, dep.error());
         }
         ++_deposit_cycles;
 
+        const bool is_savings = (account_type == "Savings" || account_type == "savings" ||
+                                 account_type == dep->accounts.savings_id);
+        const std::string& receipt_account =
+            is_savings ? dep->accounts.savings_id : dep->accounts.checking_id;
+
         const std::string pan = card ? card->number : "";
-        const json receipt = build_receipt(pan, "DEPOSIT", dep->accounts.checking_id,
+        const json receipt = build_receipt(pan, "DEPOSIT", receipt_account,
                                            dep->total_deposited_cents,
-                                           dep->accounts.checking_balance_cents, 0,
+                                           dep->target_new_balance_cents, 0,
                                            dep->overflow_swept_cents);
 
         send_json(res, 200, {
             {"status", "ok"},
             {"totalDeposited", dep->total_deposited_cents},
             {"overflowSweptCents", dep->overflow_swept_cents},
-            {"newBalance", dep->accounts.checking_balance_cents},
+            {"newBalance", dep->target_new_balance_cents},
             {"accounts", build_accounts_json(dep->accounts)},
             {"receipt", receipt}
         });

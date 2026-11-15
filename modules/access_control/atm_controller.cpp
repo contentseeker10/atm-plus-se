@@ -371,7 +371,8 @@ int AtmController::get_remaining_pin_attempts(std::string_view card) const
     return _auth_service->get_remaining_attempts(card);
 }
 
-std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(int64_t amount_cents)
+std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
+    int64_t amount_cents, std::string_view account_type)
 {
     std::unique_lock lock(_mtx);
 
@@ -391,6 +392,11 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(int64_t 
     auto accounts = load_customer_accounts(*_db, _active_session->record.number);
     if (!accounts) return std::unexpected(accounts.error());
 
+    Account* target = resolve_own_account(
+        account_type.empty() ? std::string_view{"Checking"} : account_type, *accounts);
+    if (!target) return std::unexpected(AtmError::Unauthorized);
+
+    const bool is_checking = (target == accounts->checking.get());
     const std::int64_t savings_before = accounts->savings->get_balance();
 
     if (auto replayed = consume_session_nonce(); !replayed)
@@ -399,28 +405,37 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(int64_t 
     const std::uint64_t nonce = ++_tx_nonce;
     const std::size_t audit_mark = _audit_log->size();
 
-    if (auto posted = _ledger->withdraw_with_overdraft(
-            *accounts->checking, *accounts->savings, amount_cents, nonce);
-        !posted)
+    const auto posted =
+        is_checking ? _ledger->withdraw_with_overdraft(
+                          *accounts->checking, *accounts->savings, amount_cents, nonce)
+                    : _ledger->withdraw_from_account(*accounts->savings, amount_cents, nonce);
+    if (!posted)
     {
         return std::unexpected(to_atm_error(posted.error()));
     }
 
-    if (auto committed = commit_operation(
-            std::move(next_vault), {accounts->checking.get(), accounts->savings.get()},
-            nonce, audit_mark);
+    const std::vector<const Account*> updated_accounts =
+        is_checking
+            ? std::vector<const Account*>{accounts->checking.get(), accounts->savings.get()}
+            : std::vector<const Account*>{accounts->savings.get()};
+
+    if (auto committed =
+            commit_operation(std::move(next_vault), updated_accounts, nonce, audit_mark);
         !committed)
     {
         return std::unexpected(committed.error());
     }
 
     const std::int64_t overdraft_covered =
-        std::max<std::int64_t>(0, savings_before - accounts->savings->get_balance());
-    return WithdrawResult{*plan, overdraft_covered, make_account_snapshot(*accounts)};
+        is_checking
+            ? std::max<std::int64_t>(0, savings_before - accounts->savings->get_balance())
+            : 0;
+    return WithdrawResult{*plan, overdraft_covered, make_account_snapshot(*accounts),
+                          target->get_balance()};
 }
 
 std::expected<DepositResult, AtmError> AtmController::process_deposit(
-    const std::vector<Denomination>& bills)
+    const std::vector<Denomination>& bills, std::string_view account_type)
 {
     std::unique_lock lock(_mtx);
 
@@ -437,6 +452,11 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
     auto accounts = load_customer_accounts(*_db, _active_session->record.number);
     if (!accounts) return std::unexpected(accounts.error());
 
+    Account* target = resolve_own_account(
+        account_type.empty() ? std::string_view{"Checking"} : account_type, *accounts);
+    if (!target) return std::unexpected(AtmError::Unauthorized);
+
+    const bool is_checking = (target == accounts->checking.get());
     const std::int64_t total_deposited = sum_of(bills);
     const std::int64_t savings_before = accounts->savings->get_balance();
 
@@ -446,24 +466,33 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
     const std::uint64_t nonce = ++_tx_nonce;
     const std::size_t audit_mark = _audit_log->size();
 
-    if (auto posted = _ledger->deposit_with_overflow(
-            *accounts->checking, *accounts->savings, total_deposited, nonce);
-        !posted)
+    const auto posted =
+        is_checking ? _ledger->deposit_with_overflow(
+                          *accounts->checking, *accounts->savings, total_deposited, nonce)
+                    : _ledger->deposit_to_account(*accounts->savings, total_deposited, nonce);
+    if (!posted)
     {
         return std::unexpected(to_atm_error(posted.error()));
     }
 
-    if (auto committed = commit_operation(
-            std::move(next_vault), {accounts->checking.get(), accounts->savings.get()},
-            nonce, audit_mark);
+    const std::vector<const Account*> updated_accounts =
+        is_checking
+            ? std::vector<const Account*>{accounts->checking.get(), accounts->savings.get()}
+            : std::vector<const Account*>{accounts->savings.get()};
+
+    if (auto committed =
+            commit_operation(std::move(next_vault), updated_accounts, nonce, audit_mark);
         !committed)
     {
         return std::unexpected(committed.error());
     }
 
     const std::int64_t overflow_swept =
-        std::max<std::int64_t>(0, accounts->savings->get_balance() - savings_before);
-    return DepositResult{total_deposited, overflow_swept, make_account_snapshot(*accounts)};
+        is_checking
+            ? std::max<std::int64_t>(0, accounts->savings->get_balance() - savings_before)
+            : 0;
+    return DepositResult{total_deposited, overflow_swept, make_account_snapshot(*accounts),
+                         target->get_balance()};
 }
 
 std::expected<TransferResult, AtmError> AtmController::process_transfer(
