@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "crypto.hpp"
 #include "enums.hpp"
 
 #include <string>
@@ -36,6 +37,17 @@ struct CardRecord final {
       is_blocked{blocked},
       is_expired{expired}
     {}
+
+    CardRecord(const CardRecord&) = default;
+    CardRecord& operator=(const CardRecord&) = default;
+    CardRecord(CardRecord&&) noexcept = default;
+    CardRecord& operator=(CardRecord&&) noexcept = default;
+
+    ~CardRecord() noexcept
+    {
+        crypto::secure_zero(pin_hash);
+        crypto::secure_zero(salt);
+    }
 
     std::string number;
     std::string holder;

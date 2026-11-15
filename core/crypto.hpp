@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -23,4 +24,6 @@ namespace crypto
     std::string sha256_hex(std::string_view data, std::string_view salt = "");
     std::string hmac_sha256_hex(std::string_view data, std::string_view key);
     bool constant_time_compare(std::string_view a, std::string_view b) noexcept;
-} // namespace crypto
+    void secure_zero(void* data, std::size_t size) noexcept;
+    void secure_zero(std::string& str) noexcept;
+}

@@ -26,6 +26,11 @@ AuditLog::AuditLog(std::shared_ptr<DatabaseManager> db, std::string hmac_secret_
       _chain_head{std::make_shared<const std::string>(64, '0')}
 { }
 
+AuditLog::~AuditLog() noexcept
+{
+    crypto::secure_zero(_hmac_secret_key);
+}
+
 std::expected<void, CryptoError> AuditLog::load_from_database()
 {
     if (!_db) { return std::unexpected(CryptoError::DatabaseError); }
@@ -75,7 +80,7 @@ std::expected<void, CryptoError> AuditLog::load_from_database()
             LedgerEntry& e = it->second;
             const std::string expected_hash =
                 crypto::sha256_hex(e.prev_hash + e.to_payload_string());
-            if (e.curr_hash != expected_hash)
+            if (!crypto::constant_time_compare(e.curr_hash, expected_hash))
             {
                 return std::unexpected(CryptoError::HashMismatch);
             }
@@ -186,7 +191,8 @@ std::expected<ChainVerification, CryptoError> AuditLog::verify_integrity_chain()
             const std::string expected_hmac =
                 crypto::hmac_sha256_hex(e.curr_hash, _hmac_secret_key);
 
-            if (e.prev_hash != prev || e.curr_hash != expected_hash ||
+            if (!crypto::constant_time_compare(e.prev_hash, prev) ||
+                !crypto::constant_time_compare(e.curr_hash, expected_hash) ||
                 !crypto::constant_time_compare(e.hmac_signature, expected_hmac))
             {
                 result.ok = false;
