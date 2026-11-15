@@ -36,6 +36,11 @@ public:
     { return std::unexpected(AtmError::InvalidStateTransition); }
     virtual std::expected<void, AtmError> open_vault(AtmController&, std::string_view)
     { return std::unexpected(AtmError::InvalidStateTransition); }
+
+    [[nodiscard]] virtual std::expected<void, AtmError> verify_customer_access(AtmController&) const
+    { return std::unexpected(AtmError::Unauthorized); }
+    [[nodiscard]] virtual std::expected<void, AtmError> verify_engineer_access(AtmController&) const
+    { return std::unexpected(AtmError::Unauthorized); }
 };
 
 class IdleState : public IAtmState
@@ -46,6 +51,10 @@ public:
 
     std::expected<void, AtmError> insert_card(AtmController& ctx,
                                               std::string_view card_number) override;
+    [[nodiscard]] std::expected<void, AtmError> verify_customer_access(
+        AtmController&) const override;
+    [[nodiscard]] std::expected<void, AtmError> verify_engineer_access(
+        AtmController&) const override;
 };
 
 class CardInsertedState : public IAtmState
@@ -68,6 +77,8 @@ public:
     std::expected<void, AtmError> select_service(AtmController& ctx,
                                                  ServiceType service) override;
     std::expected<void, AtmError> eject_card(AtmController& ctx) override;
+    [[nodiscard]] std::expected<void, AtmError> verify_customer_access(
+        AtmController& ctx) const override;
 };
 
 class EngineerSessionState : public IAtmState
@@ -79,4 +90,6 @@ public:
     std::expected<void, AtmError> open_vault(AtmController& ctx,
                                              std::string_view engineer_key) override;
     std::expected<void, AtmError> eject_card(AtmController& ctx) override;
+    [[nodiscard]] std::expected<void, AtmError> verify_engineer_access(
+        AtmController& ctx) const override;
 };

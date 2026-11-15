@@ -44,7 +44,6 @@ private:
     std::shared_ptr<AtmController> _atm_controller;
     std::atomic<int> _dispense_cycles{0};
     std::atomic<int> _deposit_cycles{0};
-    std::atomic<int> _remaining_attempts{3};
 
     void _mount_frontend();
 
