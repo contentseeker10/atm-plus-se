@@ -134,6 +134,9 @@ public:
 
     std::expected<void, AtmError> open_vault_door();
     std::expected<void, AtmError> close_vault_door();
+    std::expected<void, AtmError> _append_security_event(
+        std::string_view operation_type,
+        std::string_view debit_id = std::string_view{BANK_TREASURY_ACCOUNT_ID});
     bool verify_engineer_key(std::string_view engineer_key) const noexcept;
 
     const CashVault& get_vault() const noexcept { return *_vault; }

@@ -733,7 +733,8 @@ std::expected<void, AtmError> AtmController::process_unlock_card(
 
     const auto res = _auth_service->unlock_card(card_number);
     if (!res) return std::unexpected(to_atm_error(res.error()));
-    return {};
+
+    return _append_security_event("CARD_UNLOCKED", card_number);
 }
 
 std::expected<CustomerAccountSnapshot, AtmError> AtmController::get_customer_accounts()
@@ -946,7 +947,7 @@ std::expected<void, AtmError> AtmController::open_vault_door()
     if (auto session = require_role(UserRole::Engineer); !session) return session;
 
     _vault->open_door();
-    return {};
+    return _append_security_event("VAULT_DOOR_OPENED");
 }
 
 std::expected<void, AtmError> AtmController::close_vault_door()
@@ -956,6 +957,25 @@ std::expected<void, AtmError> AtmController::close_vault_door()
     if (auto session = require_role(UserRole::Engineer); !session) return session;
 
     _vault->close_door();
+    return _append_security_event("VAULT_DOOR_CLOSED");
+}
+
+std::expected<void, AtmError> AtmController::_append_security_event(
+    std::string_view operation_type, std::string_view debit_id)
+{
+    if (!_audit_log) return {};
+
+    LedgerEntry entry;
+    entry.debit_account_id = std::string(debit_id);
+    entry.credit_account_id = "SECURITY_AUDIT";
+    entry.amount_cents = 1;
+    entry.operation_type = std::string(operation_type);
+    if (auto posted = _audit_log->append_record(entry); !posted)
+    {
+        return std::unexpected(posted.error() == CryptoError::DatabaseError
+                                   ? AtmError::DatabaseError
+                                   : AtmError::InternalError);
+    }
     return {};
 }
 

@@ -205,7 +205,9 @@ TEST(atm_withdraw_rejected_with_open_door)
     CHECK(f.balance("CHK-1") == 30000);
     CHECK(f.vault_count(Denomination::D_50) == 10);
     CHECK(f.vault_count(Denomination::D_20) == 10);
-    CHECK(f.audit->size() == 0);
+
+    CHECK(f.audit->size() == 1);
+    CHECK(f.audit->entries()[0].operation_type == "VAULT_DOOR_OPENED");
 
     auto d = f.atm->process_deposit({Denomination::D_20});
     CHECK(!d.has_value());
@@ -588,8 +590,10 @@ UPDATE cards SET pin_hash = '{2}', salt = 'salt456', role = 1 WHERE card_number 
     CHECK(audit_entries.has_value());
     if (audit_entries)
     {
-        CHECK(audit_entries->size() == 1);
-        CHECK((*audit_entries)[0].operation_type == "REPLENISHMENT");
+        CHECK(audit_entries->size() == 3);
+        CHECK((*audit_entries)[0].operation_type == "VAULT_DOOR_OPENED");
+        CHECK((*audit_entries)[1].operation_type == "REPLENISHMENT");
+        CHECK((*audit_entries)[2].operation_type == "VAULT_DOOR_CLOSED");
     }
 
     const auto chain = f.atm->verify_audit_integrity();
