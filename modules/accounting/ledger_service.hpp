@@ -140,6 +140,7 @@ public:
                              std::int64_t bank_min_cents) const;
 
     bool integrity_ok() const noexcept;
+    void set_integrity_compromised(bool compromised) noexcept;
 
     std::shared_ptr<AntiReplayManager> get_anti_replay() const noexcept
     { return _anti_replay; }

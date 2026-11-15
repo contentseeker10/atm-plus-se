@@ -983,7 +983,7 @@ void HttpServerAdapter::_register_routes()
                 {"amountCents", e.amount_cents},
                 {"prevHash", e.prev_hash},
                 {"hash", e.curr_hash},
-                {"tampered", false}
+                {"tampered", _atm_controller->is_audit_entry_tampered(e)}
             });
         }
         send_json(res, 200, {{"records", records}});
@@ -1006,6 +1006,28 @@ void HttpServerAdapter::_register_routes()
             {"checkedRecords", verification->checked_records},
             {"brokenRecordId", verification->ok ? json(nullptr) : json(verification->first_broken_index + 1)},
             {"detail", detail}
+        });
+    });
+
+    _server.Post("/api/engineer/simulate-tamper", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_engineer_headers(*_atm_controller, req, res)) return;
+
+        const auto body = parse_json_body(req, res);
+        if (!body) return;
+
+        bool restore = false;
+        if (const auto it = body->find("restore"); it != body->end() && it->is_boolean())
+        {
+            restore = it->get<bool>();
+        }
+
+        const auto r = _atm_controller->simulate_audit_tamper(restore);
+        if (!r) return send_atm_error(res, r.error());
+
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"restored", restore}
         });
     });
 }

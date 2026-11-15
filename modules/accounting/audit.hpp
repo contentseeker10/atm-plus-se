@@ -19,11 +19,13 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 struct ChainVerification
@@ -52,6 +54,7 @@ public:
     std::expected<void, CryptoError> load_from_database();
 
     std::expected<ChainVerification, CryptoError> verify_integrity_chain() const;
+    bool is_entry_tampered(const LedgerEntry& entry) const;
 
     std::vector<LedgerEntry> entries() const;
     std::vector<LedgerEntry> entries_from(std::size_t start_index) const;
@@ -62,8 +65,11 @@ public:
     std::size_t size() const;
 
     void debug_tamper_amount(std::size_t index, std::int64_t new_amount);
+    void restore_tampered_entries();
 
 private:
+    bool is_entry_tampered_unlocked(const LedgerEntry& entry) const;
+
     std::shared_ptr<DatabaseManager> _db;
 
     std::string _hmac_secret_key;
@@ -71,6 +77,7 @@ private:
     std::atomic<std::shared_ptr<const std::string>> _chain_head;
 
     std::vector<LedgerEntry> _entries;
+    std::unordered_map<std::size_t, std::int64_t> _tampered_original_amounts;
 
     mutable std::mutex _mtx;
 };

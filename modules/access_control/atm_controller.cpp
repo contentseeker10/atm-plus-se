@@ -834,7 +834,41 @@ std::expected<ChainVerification, AtmError> AtmController::verify_audit_integrity
 
     auto result = _audit_log->verify_integrity_chain();
     if (!result) return std::unexpected(AtmError::CryptoVerificationFailed);
+    if (!result->ok && _ledger)
+    {
+        _ledger->set_integrity_compromised(true);
+    }
     return *result;
+}
+
+bool AtmController::is_audit_entry_tampered(const LedgerEntry& entry) const
+{
+    return _audit_log ? _audit_log->is_entry_tampered(entry) : false;
+}
+
+std::expected<void, AtmError> AtmController::simulate_audit_tamper(bool restore)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session)
+        return std::unexpected(session.error());
+    if (!_audit_log || !_ledger) return std::unexpected(AtmError::InternalError);
+
+    if (restore)
+    {
+        _audit_log->restore_tampered_entries();
+        _ledger->set_integrity_compromised(false);
+        return {};
+    }
+
+    const auto entries = _audit_log->entries();
+    if (entries.empty()) return std::unexpected(AtmError::InvalidAmount);
+
+    const std::size_t target_index = entries.size() - 1;
+    const std::int64_t tampered_amount =
+        entries[target_index].amount_cents == 99999900 ? 88888800 : 99999900;
+    _audit_log->debug_tamper_amount(target_index, tampered_amount);
+    return {};
 }
 
 std::expected<void, AtmError> AtmController::open_vault_door()

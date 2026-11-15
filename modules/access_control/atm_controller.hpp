@@ -126,6 +126,8 @@ public:
     std::expected<std::vector<LedgerEntry>, AtmError> get_audit_entries(
         std::size_t offset = 0, std::size_t limit = 0);
     std::expected<ChainVerification, AtmError> verify_audit_integrity();
+    bool is_audit_entry_tampered(const LedgerEntry& entry) const;
+    std::expected<void, AtmError> simulate_audit_tamper(bool restore = false);
 
     std::expected<void, AtmError> open_vault_door();
     std::expected<void, AtmError> close_vault_door();

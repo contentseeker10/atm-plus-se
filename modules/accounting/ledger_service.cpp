@@ -49,6 +49,11 @@ LedgerService::LedgerService(std::shared_ptr<AuditLog> audit_log,
 
 bool LedgerService::integrity_ok() const noexcept { return !_integrity_compromised; }
 
+void LedgerService::set_integrity_compromised(bool compromised) noexcept
+{
+    _integrity_compromised = compromised;
+}
+
 LedgerEntry LedgerService::make_entry(std::string_view debit_id,
                                       std::string_view credit_id,
                                       std::int64_t amount_cents,
