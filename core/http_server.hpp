@@ -14,7 +14,9 @@
 
 #include <httplib.h>
 
+#include <atomic>
 #include <filesystem>
+#include <memory>
 
 inline constexpr auto HOST      = "0.0.0.0";
 inline constexpr auto VIEW_PATH = "../../../view";
@@ -25,7 +27,7 @@ class HttpServerAdapter
 {
 public:
     HttpServerAdapter(std::shared_ptr<AtmController> controller, int port = 8080)
-        : _atm_controller{controller}, _port{port}
+        : _port{port}, _atm_controller{std::move(controller)}
     { }
 
     void start() { 
@@ -35,13 +37,15 @@ public:
     }
     void stop() noexcept { _server.stop(); }
 
-    
-    private:
+private:
     httplib::Server _server;
     int _port{8080};
-    
+
     std::shared_ptr<AtmController> _atm_controller;
-    
+    std::atomic<int> _dispense_cycles{0};
+    std::atomic<int> _deposit_cycles{0};
+    std::atomic<int> _remaining_attempts{3};
+
     void _mount_frontend();
 
     void _register_routes();
