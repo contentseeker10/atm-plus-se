@@ -600,3 +600,90 @@ UPDATE cards SET pin_hash = '{2}', salt = 'salt456', role = 1 WHERE card_number 
     CHECK(!f.atm->get_active_session_id().has_value());
     done();
 }
+
+TEST(atm_operation_results_and_fsm_enforcement)
+{
+    begin("Operation result structs, FSM state authorization and PIN attempt counter");
+    AtmFixture f{{.checking_cents = 25000,
+                  .client_min_cents = 10000,
+                  .overflow_max_cents = 25000,
+                  .savings_cents = 15000},
+                 "(10000, 10, 100), (5000, 10, 100)"};
+
+    const std::string customer_hash = crypto::sha256_hex("1234", "salt123");
+    const std::string update_card_sql = std::format(R"sql(
+UPDATE cards SET pin_hash = '{0}', salt = 'salt123', role = 0 WHERE card_number = '{1}';
+)sql",
+                                                    customer_hash, kCustomerCard);
+
+    const bool updated =
+        f.db->execute_transaction(
+                [&update_card_sql](sqlite3* raw)
+                { return storage::exec(raw, update_card_sql.c_str()).has_value(); })
+            .has_value();
+    CHECK(updated);
+
+    CHECK(f.atm->process_insert_card(kCustomerCard).has_value());
+    CHECK(f.atm->get_current_state_name() == "CardInserted");
+
+    const auto pre_pin_wd = f.atm->process_withdraw(10000);
+    CHECK(!pre_pin_wd.has_value());
+    CHECK(pre_pin_wd.error() == AtmError::Unauthorized);
+
+    CHECK(f.atm->get_remaining_pin_attempts(kCustomerCard) == 3);
+    const auto bad_pin = f.atm->process_enter_pin("9999");
+    CHECK(!bad_pin.has_value());
+    CHECK(bad_pin.error() == AtmError::InvalidPin);
+    CHECK(f.atm->get_remaining_pin_attempts(kCustomerCard) == 2);
+
+    CHECK(f.atm->process_enter_pin("1234").has_value());
+    CHECK(f.atm->get_current_state_name() == "CustomerSession");
+    CHECK(f.atm->get_remaining_pin_attempts(kCustomerCard) == 3);
+
+    const auto wd = f.atm->process_withdraw(25000);
+    CHECK(wd.has_value());
+    if (wd)
+    {
+        CHECK(wd->dispensed_bills.at(Denomination::D_100) == 2);
+        CHECK(wd->dispensed_bills.at(Denomination::D_50) == 1);
+        CHECK(wd->overdraft_covered_cents == 10000);
+        CHECK(wd->accounts.checking_balance_cents == 10000);
+        CHECK(wd->accounts.savings_balance_cents == 5000);
+    }
+
+    const auto dep = f.atm->process_deposit({Denomination::D_100, Denomination::D_100});
+    CHECK(dep.has_value());
+    if (dep)
+    {
+        CHECK(dep->total_deposited_cents == 20000);
+        CHECK(dep->overflow_swept_cents == 5000);
+        CHECK(dep->accounts.checking_balance_cents == 25000);
+        CHECK(dep->accounts.savings_balance_cents == 10000);
+    }
+
+    const auto tr = f.atm->process_transfer("Checking", "Savings", 5000);
+    CHECK(tr.has_value());
+    if (tr)
+    {
+        CHECK(tr->source_new_balance_cents == 20000);
+        CHECK(tr->accounts.checking_balance_cents == 20000);
+        CHECK(tr->accounts.savings_balance_cents == 15000);
+    }
+
+    CHECK(f.atm->process_eject_card().has_value());
+    CHECK(f.atm->process_insert_card(kCustomerCard).has_value());
+
+    const auto wrong1 = f.atm->process_enter_pin("9999");
+    CHECK(!wrong1.has_value() && wrong1.error() == AtmError::InvalidPin);
+    CHECK(f.atm->get_remaining_pin_attempts(kCustomerCard) == 2);
+
+    const auto wrong2 = f.atm->process_enter_pin("9999");
+    CHECK(!wrong2.has_value() && wrong2.error() == AtmError::InvalidPin);
+    CHECK(f.atm->get_remaining_pin_attempts(kCustomerCard) == 1);
+
+    const auto wrong3 = f.atm->process_enter_pin("9999");
+    CHECK(!wrong3.has_value() && wrong3.error() == AtmError::MaxAttemptsExceeded);
+    CHECK(f.atm->get_remaining_pin_attempts(kCustomerCard) == 0);
+    CHECK(f.atm->get_current_state_name() == "Idle");
+    done();
+}
