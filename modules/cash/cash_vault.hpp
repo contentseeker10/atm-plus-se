@@ -35,6 +35,8 @@ public:
 
     std::expected<void, VaultError> replenish(Denomination denomination, int count);
 
+    std::expected<int, VaultError> replace_cassette(Denomination denomination, int new_count);
+
     std::int64_t get_total_cash_cents() const noexcept;
 
     const std::map<Denomination, Cassette>& get_cassettes() const noexcept;

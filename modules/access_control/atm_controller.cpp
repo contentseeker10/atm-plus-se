@@ -668,6 +668,74 @@ std::expected<void, AtmError> AtmController::process_replenish(Denomination deno
     return commit_operation(std::move(next_vault), {}, nonce, audit_mark);
 }
 
+std::expected<void, AtmError> AtmController::process_replace_cassette(
+    Denomination denomination, int new_count)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+    if (!_ledger || !_audit_log) return std::unexpected(AtmError::InternalError);
+    if (!_ledger->integrity_ok())
+        return std::unexpected(AtmError::CryptoVerificationFailed);
+
+    CashVault next_vault{*_vault};
+    const auto delta = next_vault.replace_cassette(denomination, new_count);
+    if (!delta)
+    {
+        return std::unexpected(to_atm_error(delta.error()));
+    }
+
+    if (*delta == 0)
+    {
+        return {};
+    }
+
+    if (auto replayed = consume_session_nonce(); !replayed) return replayed;
+
+    const std::uint64_t nonce = ++_tx_nonce;
+    const std::size_t audit_mark = _audit_log->size();
+
+    LedgerEntry entry;
+    if (*delta > 0)
+    {
+        entry.debit_account_id = std::string(ATM_VAULT_ACCOUNT_ID);
+        entry.credit_account_id = std::string(BANK_TREASURY_ACCOUNT_ID);
+        entry.amount_cents = static_cast<std::int64_t>(denomination) * (*delta);
+        entry.operation_type = "REPLENISHMENT";
+    }
+    else
+    {
+        entry.debit_account_id = std::string(BANK_TREASURY_ACCOUNT_ID);
+        entry.credit_account_id = std::string(ATM_VAULT_ACCOUNT_ID);
+        entry.amount_cents = static_cast<std::int64_t>(denomination) * (-*delta);
+        entry.operation_type = "CASSETTE_UNLOAD";
+    }
+    entry.nonce = nonce;
+
+    if (auto posted = _audit_log->append_record(entry); !posted)
+    {
+        return std::unexpected(posted.error() == CryptoError::DatabaseError
+                                   ? AtmError::DatabaseError
+                                   : AtmError::InternalError);
+    }
+
+    return commit_operation(std::move(next_vault), {}, nonce, audit_mark);
+}
+
+std::expected<void, AtmError> AtmController::process_unlock_card(
+    std::string_view card_number)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+    if (!_auth_service) return std::unexpected(AtmError::InternalError);
+    if (card_number.empty()) return std::unexpected(AtmError::CardNotFound);
+
+    const auto res = _auth_service->unlock_card(card_number);
+    if (!res) return std::unexpected(to_atm_error(res.error()));
+    return {};
+}
+
 std::expected<CustomerAccountSnapshot, AtmError> AtmController::get_customer_accounts()
 {
     std::unique_lock lock(_mtx);

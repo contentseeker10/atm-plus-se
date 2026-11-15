@@ -190,6 +190,22 @@ std::expected<void, VaultError> CashVault::replenish(Denomination denomination, 
     return cassette->second.add_bills(count);
 }
 
+std::expected<int, VaultError> CashVault::replace_cassette(Denomination denomination,
+                                                           int new_count)
+{
+    if (_is_door_closed) return std::unexpected(VaultError::DoorClosed);
+
+    const auto cassette = _cassettes.find(denomination);
+    if (cassette == _cassettes.end()) return std::unexpected(VaultError::MissingCassette);
+
+    const int previous = cassette->second.get_count();
+    if (auto r = cassette->second.set_bills(new_count); !r)
+    {
+        return std::unexpected(r.error());
+    }
+    return new_count - previous;
+}
+
 std::int64_t CashVault::get_total_cash_cents() const noexcept
 {
     std::int64_t total = 0;

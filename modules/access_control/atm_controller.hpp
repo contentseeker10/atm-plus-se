@@ -115,6 +115,9 @@ public:
         std::int64_t amount_cents, std::string_view idempotency_key = "",
         std::optional<std::uint64_t> incoming_nonce = std::nullopt);
     std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
+    std::expected<void, AtmError> process_replace_cassette(Denomination denomination,
+                                                           int new_count);
+    std::expected<void, AtmError> process_unlock_card(std::string_view card_number);
 
     std::expected<CustomerAccountSnapshot, AtmError> get_customer_accounts();
     std::expected<std::vector<ApsRule>, AtmError> get_customer_aps_rules();
@@ -148,7 +151,7 @@ public:
     { return _current_state->get_state_name(); }
 
 private:
-    inline static constexpr std::chrono::seconds kTimeout = 60s;
+    inline static constexpr std::chrono::seconds kTimeout = 45s;
     inline static constexpr std::string_view kDefaultEngineerKey = "ENG-MASTER-KEY-2026";
 
     std::expected<void, AtmError> require_role(UserRole role);

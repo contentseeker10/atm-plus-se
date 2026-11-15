@@ -64,6 +64,7 @@ namespace
         case AtmError::InvalidAmount: return "InvalidAmount";
         case AtmError::CassetteFull: return "CassetteFull";
         case AtmError::VaultDoorOpen: return "VaultDoorOpen";
+        case AtmError::VaultDoorClosed: return "VaultDoorClosed";
         case AtmError::CardNotFound: return "CardNotFound";
         case AtmError::CardBlocked: return "CardBlocked";
         case AtmError::InvalidPin: return "InvalidPin";
@@ -96,6 +97,7 @@ namespace
         case AtmError::CassetteFull:
         case AtmError::ReplayAttackDetected:
         case AtmError::CryptoVerificationFailed:
+        case AtmError::VaultDoorClosed:
         case AtmError::InvalidStateTransition: return 409;
         case AtmError::VaultDoorOpen: return 503;
         case AtmError::DatabaseError:
@@ -122,6 +124,7 @@ namespace
         case AtmError::InvalidAmount: return "Invalid amount or unsupported denomination.";
         case AtmError::CassetteFull: return "Cassette capacity exceeded.";
         case AtmError::VaultDoorOpen: return "Vault door is open. Customer operations are locked.";
+        case AtmError::VaultDoorClosed: return "Safe door is closed. Open vault door before servicing cassettes.";
         case AtmError::CardNotFound: return "Unrecognized card number.";
         case AtmError::CardBlocked: return "Card is blocked due to security policy.";
         case AtmError::InvalidPin: return "Incorrect PIN code.";
@@ -542,7 +545,8 @@ void HttpServerAdapter::_register_routes()
             {"requiresPin", true},
             {"cardHolder", holder},
             {"maskedPan", mask_pan(*card_number)},
-            {"remainingAttempts", remaining}
+            {"remainingAttempts", remaining},
+            {"timeoutSeconds", 45}
         });
     });
 
@@ -601,7 +605,8 @@ void HttpServerAdapter::_register_routes()
             {"token", token},
             {"role", role},
             {"cardHolder", holder},
-            {"remainingAttempts", remaining}
+            {"remainingAttempts", remaining},
+            {"timeoutSeconds", 45}
         });
     });
 
@@ -915,17 +920,22 @@ void HttpServerAdapter::_register_routes()
             if (!denom) denom = to_denomination(*d * 100);
         }
 
-        const auto count = read_int64(*body, "addCount", "delta");
-        if (!denom || !count)
+        const auto set_count = read_int64(*body, "setCount", "newCount");
+        const auto add_count = read_int64(*body, "addCount", "delta");
+        if (!denom || (!set_count && !add_count))
         {
             return send_atm_error(res, AtmError::InvalidAmount);
         }
 
-        if (const auto r =
-                _atm_controller->process_replenish(*denom, static_cast<int>(*count));
-            !r)
+        const auto r = set_count
+            ? _atm_controller->process_replace_cassette(*denom, static_cast<int>(*set_count))
+            : _atm_controller->process_replenish(*denom, static_cast<int>(*add_count));
+        if (!r)
         {
-            return send_atm_error(res, r.error());
+            const AtmError mapped =
+                (r.error() == AtmError::VaultAccessDenied) ? AtmError::VaultDoorClosed
+                                                           : r.error();
+            return send_atm_error(res, mapped);
         }
 
         json payload = build_vault_json(_atm_controller->get_vault(),
@@ -1028,6 +1038,28 @@ void HttpServerAdapter::_register_routes()
         send_json(res, 200, {
             {"status", "ok"},
             {"restored", restore}
+        });
+    });
+
+    _server.Post("/api/engineer/unlock-card", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_engineer_headers(*_atm_controller, req, res)) return;
+
+        const auto body = parse_json_body(req, res);
+        if (!body) return;
+
+        const auto card_number = read_string(*body, "cardNumber", "pan");
+        if (!card_number || card_number->empty())
+        {
+            return send_atm_error(res, AtmError::CardNotFound);
+        }
+
+        const auto r = _atm_controller->process_unlock_card(*card_number);
+        if (!r) return send_atm_error(res, r.error());
+
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"cardNumber", *card_number}
         });
     });
 }
