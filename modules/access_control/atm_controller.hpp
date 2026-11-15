@@ -51,7 +51,8 @@ class AtmController
 public:
     AtmController(std::unique_ptr<CashVault> vault, std::shared_ptr<DatabaseManager> db,
                   std::shared_ptr<AuditLog> log, std::unique_ptr<AuthService> auth,
-                  std::shared_ptr<LedgerService> ledger = nullptr);
+                  std::shared_ptr<LedgerService> ledger = nullptr,
+                  std::shared_ptr<AntiReplayManager> anti_replay = nullptr);
     ~AtmController();
 
     AtmController(const AtmController&) = delete;
@@ -105,8 +106,8 @@ private:
 
     std::expected<void, AtmError> require_role(UserRole role);
     std::expected<void, AtmError> consume_session_nonce();
-    std::expected<void, AtmError> commit_cash_operation(
-        CashVault next_vault, const std::vector<const Account*>& accounts,
+    std::expected<void, AtmError> commit_operation(
+        std::optional<CashVault> next_vault, const std::vector<const Account*>& accounts,
         std::uint64_t nonce, std::size_t audit_mark);
 
     std::shared_ptr<DatabaseManager>   _db;

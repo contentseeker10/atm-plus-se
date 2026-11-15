@@ -42,7 +42,6 @@ enum class LedgerError
     InvalidRule
 };
 
-// System account for physical cash inside the vault
 inline constexpr std::string_view ATM_VAULT_ACCOUNT_ID = "ATM_VAULT";
 
 struct ApsRule
@@ -103,6 +102,12 @@ public:
                              std::int64_t bank_min_cents) const;
 
     bool integrity_ok() const noexcept;
+
+    std::shared_ptr<AntiReplayManager> get_anti_replay() const noexcept
+    { return _anti_replay; }
+
+    std::expected<void, LedgerError> reverse_entries(std::uint64_t nonce,
+                                                     std::size_t audit_mark);
 
 private:
     std::expected<void, LedgerError> append_entries(std::vector<LedgerEntry> entries);

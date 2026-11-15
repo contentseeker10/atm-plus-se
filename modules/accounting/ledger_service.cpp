@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <map>
+#include <tuple>
 #include <utility>
 
 namespace
@@ -33,7 +34,7 @@ namespace
         }
         return LedgerError::AuditFailure;
     }
-} // namespace
+}
 
 LedgerService::LedgerService(std::shared_ptr<AuditLog> audit_log,
                              std::shared_ptr<AntiReplayManager> anti_replay)
@@ -109,7 +110,7 @@ std::expected<void, LedgerError> LedgerService::transfer(Account& from, Account&
     }
     if (auto d = to.deposit(amount_cents); !d)
     {
-        from.deposit(amount_cents);
+        std::ignore = from.deposit(amount_cents);
         return std::unexpected(map_account_error(d.error()));
     }
 
@@ -117,8 +118,8 @@ std::expected<void, LedgerError> LedgerService::transfer(Account& from, Account&
                                             amount_cents, operation_type, nonce)});
         !r)
     {
-        to.withdraw(amount_cents);
-        from.deposit(amount_cents);
+        std::ignore = to.withdraw(amount_cents);
+        std::ignore = from.deposit(amount_cents);
         return r;
     }
     return {};
@@ -151,7 +152,7 @@ std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
         }
         if (auto d = checking.deposit(needed); !d)
         {
-            savings.deposit(needed);
+            std::ignore = savings.deposit(needed);
             return std::unexpected(map_account_error(d.error()));
         }
     }
@@ -160,8 +161,8 @@ std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
     {
         if (needs_coverage)
         {
-            checking.withdraw(needed);
-            savings.deposit(needed);
+            std::ignore = checking.withdraw(needed);
+            std::ignore = savings.deposit(needed);
         }
         return std::unexpected(map_account_error(w.error()));
     }
@@ -177,11 +178,11 @@ std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
 
     if (auto r = append_entries(std::move(entries)); !r)
     {
-        checking.deposit(amount_cents);
+        std::ignore = checking.deposit(amount_cents);
         if (needs_coverage)
         {
-            checking.withdraw(needed);
-            savings.deposit(needed);
+            std::ignore = checking.withdraw(needed);
+            std::ignore = savings.deposit(needed);
         }
         return r;
     }
@@ -212,7 +213,7 @@ std::expected<void, LedgerError> LedgerService::deposit_with_overflow(
         }
         if (auto d2 = savings.deposit(excess); !d2)
         {
-            checking.deposit(excess);
+            std::ignore = checking.deposit(excess);
             return std::unexpected(map_account_error(d2.error()));
         }
     }
@@ -230,10 +231,10 @@ std::expected<void, LedgerError> LedgerService::deposit_with_overflow(
     {
         if (excess > 0)
         {
-            savings.withdraw(excess);
-            checking.deposit(excess);
+            std::ignore = savings.withdraw(excess);
+            std::ignore = checking.deposit(excess);
         }
-        checking.withdraw(amount_cents);
+        std::ignore = checking.withdraw(amount_cents);
         return r;
     }
     return {};
@@ -325,8 +326,6 @@ InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accou
 {
     InvCheckReport report;
 
-    // 1. Hash chain + HMAC links
-
     auto chain = _audit_log->verify_integrity_chain();
     if (!chain) { report.failures.push_back("hash chain verification error"); }
     else if (!chain->ok)
@@ -340,8 +339,6 @@ InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accou
     }
 
     const std::vector<LedgerEntry> log = _audit_log->entries();
-
-    // 2. Zero-sum journal & balance == sum of historical postings
 
     std::map<std::string, std::int64_t> net;
     for (const auto& e : log)
@@ -366,8 +363,6 @@ InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accou
     }
     report.passed_checks.push_back("account balances match historical postings");
 
-    // 3. Physical vault cash == ATM_VAULT ledger balance
-
     const auto vault_it = net.find(std::string(ATM_VAULT_ACCOUNT_ID));
     const std::int64_t vault_ledger = vault_it == net.end() ? 0 : -vault_it->second;
     if (vault_ledger != vault_cash_cents)
@@ -381,8 +376,6 @@ InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accou
         report.passed_checks.push_back(
             "physical vault cash equals ATM_VAULT ledger balance");
     }
-
-    // 4. Account invariants & bankMin <= clientMin < overflowMax, balance >= bankMin
 
     for (const Account* account : accounts)
     {
@@ -409,4 +402,24 @@ InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accou
     if (!report.passed) { _integrity_compromised = true; }
 
     return report;
+}
+
+std::expected<void, LedgerError> LedgerService::reverse_entries(std::uint64_t nonce,
+                                                                std::size_t audit_mark)
+{
+    if (!_audit_log) { return std::unexpected(LedgerError::AuditFailure); }
+
+    const std::vector<LedgerEntry> recent = _audit_log->entries_from(audit_mark);
+    std::vector<LedgerEntry> reversal;
+    reversal.reserve(recent.size());
+
+    for (auto it = recent.crbegin(); it != recent.crend(); ++it)
+    {
+        if (it->nonce != nonce) { continue; }
+        reversal.push_back(make_entry(it->credit_account_id, it->debit_account_id,
+                                      it->amount_cents, it->operation_type + "_REVERSAL",
+                                      nonce));
+    }
+
+    return append_entries(std::move(reversal));
 }

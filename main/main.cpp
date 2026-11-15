@@ -92,7 +92,8 @@ int main()
         auto ledger = std::make_shared<LedgerService>(audit, anti_replay);
 
         log("Initializing ATM Controller...");
-        auto controller = std::make_shared<AtmController>(std::move(vault), db, audit, std::move(auth), ledger);
+        auto controller = std::make_shared<AtmController>(
+            std::move(vault), db, audit, std::move(auth), ledger, anti_replay);
 
         log("Initializing HTTP Server Adapter...");
         HttpServerAdapter http(controller);

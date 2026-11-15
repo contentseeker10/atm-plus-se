@@ -155,29 +155,6 @@ namespace
         return total;
     }
 
-    std::expected<void, CryptoError> reverse_entries(AuditLog& log, std::uint64_t nonce,
-                                                     std::size_t audit_mark)
-    {
-        const std::vector<LedgerEntry> entries = log.entries();
-
-        std::vector<LedgerEntry> reversal;
-        for (std::size_t i = entries.size(); i > audit_mark; --i)
-        {
-            const LedgerEntry& original = entries[i - 1];
-            if (original.nonce != nonce) continue;
-
-            LedgerEntry entry;
-            entry.debit_account_id = original.credit_account_id;
-            entry.credit_account_id = original.debit_account_id;
-            entry.amount_cents = original.amount_cents;
-            entry.operation_type = original.operation_type + "_REVERSAL";
-            entry.nonce = nonce;
-            reversal.push_back(std::move(entry));
-        }
-
-        return log.append_batch(reversal);
-    }
-
     Account* resolve_own_account(std::string_view key,
                                  CustomerAccounts& accounts) noexcept
     {
@@ -193,17 +170,26 @@ namespace
         }
         return nullptr;
     }
-} // namespace
+}
 
 AtmController::AtmController(std::unique_ptr<CashVault> vault,
                              std::shared_ptr<DatabaseManager> db,
                              std::shared_ptr<AuditLog> log,
                              std::unique_ptr<AuthService> auth,
-                             std::shared_ptr<LedgerService> ledger)
+                             std::shared_ptr<LedgerService> ledger,
+                             std::shared_ptr<AntiReplayManager> anti_replay)
     : _db{std::move(db)}, _audit_log{std::move(log)}, _ledger{std::move(ledger)},
-      _anti_replay{std::make_shared<AntiReplayManager>()},
+      _anti_replay{std::move(anti_replay)},
       _vault{std::move(vault)}, _auth_service{std::move(auth)}
 {
+    if (!_anti_replay && _ledger)
+    {
+        _anti_replay = _ledger->get_anti_replay();
+    }
+    if (!_anti_replay)
+    {
+        _anti_replay = std::make_shared<AntiReplayManager>();
+    }
     if (!_ledger && _audit_log)
     {
         _ledger = std::make_shared<LedgerService>(_audit_log, _anti_replay);
@@ -385,9 +371,9 @@ std::expected<void, AtmError> AtmController::process_withdraw(int64_t amount_cen
         return std::unexpected(to_atm_error(posted.error()));
     }
 
-    return commit_cash_operation(std::move(next_vault),
-                                 {accounts->checking.get(), accounts->savings.get()},
-                                 nonce, audit_mark);
+    return commit_operation(std::move(next_vault),
+                            {accounts->checking.get(), accounts->savings.get()},
+                            nonce, audit_mark);
 }
 
 std::expected<void, AtmError> AtmController::process_deposit(
@@ -419,9 +405,9 @@ std::expected<void, AtmError> AtmController::process_deposit(
         return std::unexpected(to_atm_error(posted.error()));
     }
 
-    return commit_cash_operation(std::move(next_vault),
-                                 {accounts->checking.get(), accounts->savings.get()},
-                                 nonce, audit_mark);
+    return commit_operation(std::move(next_vault),
+                            {accounts->checking.get(), accounts->savings.get()},
+                            nonce, audit_mark);
 }
 
 std::expected<void, AtmError> AtmController::process_transfer(
@@ -496,21 +482,7 @@ std::expected<void, AtmError> AtmController::process_transfer(
         return std::unexpected(to_atm_error(posted.error()));
     }
 
-    const auto saved = _db->execute_transaction(
-        [&](sqlite3* raw)
-        {
-            return storage::save_account(raw, *from).has_value() &&
-                   storage::save_account(raw, *to).has_value();
-        });
-
-    if (!saved)
-    {
-        if (!reverse_entries(*_audit_log, nonce, audit_mark))
-            return std::unexpected(AtmError::InternalError);
-        return std::unexpected(AtmError::DatabaseError);
-    }
-
-    return {};
+    return commit_operation(std::nullopt, {from, to}, nonce, audit_mark);
 }
 
 std::expected<void, AtmError> AtmController::process_replenish(Denomination denomination,
@@ -548,7 +520,7 @@ std::expected<void, AtmError> AtmController::process_replenish(Denomination deno
                                    : AtmError::InternalError);
     }
 
-    return commit_cash_operation(std::move(next_vault), {}, nonce, audit_mark);
+    return commit_operation(std::move(next_vault), {}, nonce, audit_mark);
 }
 
 std::expected<CustomerAccountSnapshot, AtmError> AtmController::get_customer_accounts()
@@ -637,29 +609,33 @@ std::expected<void, AtmError> AtmController::consume_session_nonce()
     return {};
 }
 
-std::expected<void, AtmError> AtmController::commit_cash_operation(
-    CashVault next_vault, const std::vector<const Account*>& accounts,
+std::expected<void, AtmError> AtmController::commit_operation(
+    std::optional<CashVault> next_vault, const std::vector<const Account*>& accounts,
     std::uint64_t nonce, std::size_t audit_mark)
 {
-    const auto inventory = inventory_of(next_vault);
+    const auto inventory = next_vault ? std::optional{inventory_of(*next_vault)} : std::nullopt;
 
     const auto saved = _db->execute_transaction(
         [&](sqlite3* raw)
         {
-            for (auto it = accounts.cbegin(); it != accounts.cend(); ++it)
+            for (const Account* acc : accounts)
             {
-                if (!storage::save_account(raw, **it)) return false;
+                if (!storage::save_account(raw, *acc)) return false;
             }
-            return storage::save_vault_inventory(raw, inventory).has_value();
+            if (inventory && !storage::save_vault_inventory(raw, *inventory)) return false;
+            return true;
         });
 
     if (!saved)
     {
-        if (!reverse_entries(*_audit_log, nonce, audit_mark))
+        if (!_ledger || !_ledger->reverse_entries(nonce, audit_mark))
             return std::unexpected(AtmError::InternalError);
         return std::unexpected(AtmError::DatabaseError);
     }
 
-    *_vault = std::move(next_vault);
+    if (next_vault)
+    {
+        *_vault = std::move(*next_vault);
+    }
     return {};
 }
