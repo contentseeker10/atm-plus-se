@@ -83,27 +83,43 @@ export const api = {
       Authorization: `Bearer ${token}`
     });
   },
-  withdraw(token, accountType, amountCents) {
+  withdraw(token, accountType, amountCents, nonce) {
     return request(
       'POST',
       '/customer/withdraw',
-      { accountType, amount: amountCents },
+      {
+        accountType,
+        amount: amountCents,
+        idempotencyKey: generateIdempotencyKey(),
+        nonce
+      },
       { Authorization: `Bearer ${token}` }
     );
   },
-  deposit(token, accountType, bills) {
+  deposit(token, accountType, bills, nonce) {
     return request(
       'POST',
       '/customer/deposit',
-      { accountType, bills },
+      {
+        accountType,
+        bills,
+        idempotencyKey: generateIdempotencyKey(),
+        nonce
+      },
       { Authorization: `Bearer ${token}` }
     );
   },
-  transfer(token, from, to, amountCents) {
+  transfer(token, from, to, amountCents, nonce) {
     return request(
       'POST',
       '/customer/transfer',
-      { from, to, amount: amountCents, idempotencyKey: generateIdempotencyKey() },
+      {
+        from,
+        to,
+        amount: amountCents,
+        idempotencyKey: generateIdempotencyKey(),
+        nonce
+      },
       { Authorization: `Bearer ${token}` }
     );
   },

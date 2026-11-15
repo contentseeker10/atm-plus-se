@@ -345,7 +345,7 @@ class AtmSimulatorApp {
 
     try {
       const res = await this._withBusy('VERIFYING LEDGER & DISPENSING BANKNOTES...', () =>
-        api.withdraw(token, accountType, amountCents)
+        api.withdraw(token, accountType, amountCents, store.nextSessionNonce())
       );
 
       this._pendingReceipt = res.receipt || null;
@@ -407,7 +407,7 @@ class AtmSimulatorApp {
 
     try {
       const res = await this._withBusy('VALIDATING BANKNOTES & CREDITING LEDGER...', () =>
-        api.deposit(token, accountType, bills)
+        api.deposit(token, accountType, bills, store.nextSessionNonce())
       );
 
       this._billAcceptor.clearStagedBills();
@@ -447,7 +447,7 @@ class AtmSimulatorApp {
 
     try {
       const res = await this._withBusy('EXECUTING ANTI-REPLAY LEDGER TRANSFER...', () =>
-        api.transfer(token, from, to, amountCents)
+        api.transfer(token, from, to, amountCents, store.nextSessionNonce())
       );
 
       this._pendingReceipt = res.receipt || null;
