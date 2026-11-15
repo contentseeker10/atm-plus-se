@@ -182,16 +182,8 @@
   <!-- Compact Environment Status Bar -->
   <footer id="env-status-bar" class="env-status-bar" aria-label="Backend Environment Controls">
     <div class="env-mode-group">
-      <span class="env-group-label">ADAPTER MODE:</span>
-      <label class="env-toggle-option">
-        <input type="radio" name="adapter-mode" id="mode-mock-radio" value="mock" checked>
-        <span class="env-check-box" id="mode-mock-indicator">[x] Mock Mode</span>
-      </label>
-      <span class="env-divider">|</span>
-      <label class="env-toggle-option">
-        <input type="radio" name="adapter-mode" id="mode-live-radio" value="live">
-        <span class="env-check-box" id="mode-live-indicator">[ ] Live Backend</span>
-      </label>
+      <span class="env-group-label">BACKEND:</span>
+      <span class="env-check-box" style="color: var(--status-ok); background: var(--status-ok-bg); border-color: rgba(16, 185, 129, 0.35); font-weight: 700;">LIVE C++ HTTP SERVER</span>
     </div>
 
     <div class="env-url-group">
@@ -204,9 +196,6 @@
         spellcheck="false"
       >
       <button type="button" id="apply-api-url-btn" class="env-action-btn">Apply</button>
-      <button type="button" id="reset-mock-btn" class="env-action-btn env-btn-secondary" title="Reset in-memory mock accounts, cassettes, and audit log">
-        Reset Mock State
-      </button>
     </div>
   </footer>
 

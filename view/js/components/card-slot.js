@@ -1,6 +1,6 @@
+import { DEMO_CARDS } from '../config.js';
 import { FSM_STATES, store } from '../state.js';
-import { getTestCardsSnapshot, toggleTestCardExpired } from '../api.js';
-import { escapeHtml, maskCardNumber, qs } from '../utils/dom.js';
+import { escapeHtml, maskCardNumber, qs, wipeInput } from '../utils/dom.js';
 
 export class CardSlotComponent {
   constructor({ slotRoot, walletRoot, ledLabelEl, onInsertCard, onEjectCard }) {
@@ -100,57 +100,60 @@ export class CardSlotComponent {
 
   _renderWallet(state) {
     if (!this._walletRoot) return;
-    const cards = getTestCardsSnapshot();
     const isIdle = state.fsmState === FSM_STATES.IDLE && !state.isBusy;
 
-    this._walletRoot.innerHTML = cards
-      .map((card) => {
-        const isCurrent = state.cardNumber === card.cardNumber;
-        const statusTags = [];
-        if (card.blocked) statusTags.push('BLOCKED');
-        else if (card.expired) statusTags.push('EXPIRED');
-        else statusTags.push(`TRIES: ${card.remainingAttempts}/3`);
+    const cardsHtml = DEMO_CARDS.map((card) => {
+      const isCurrent = state.cardNumber === card.cardNumber;
+      const statusTag = card.blocked ? 'BLOCKED' : card.role.toUpperCase();
+      const pinInfo = card.blocked
+        ? 'STATUS: BLOCKED'
+        : `PIN: ${escapeHtml(card.pin)}${card.masterKey ? ` | KEY: ${escapeHtml(card.masterKey)}` : ''}`;
 
-        const pinInfo = card.blocked
-          ? 'STATUS: BLOCKED'
-          : `PIN: ${escapeHtml(card.pin)}${card.masterKey ? ` | KEY: ${escapeHtml(card.masterKey)}` : ''}`;
+      return `
+        <article class="test-card-item ${escapeHtml(card.theme)} ${isCurrent ? 'active-card' : ''}">
+          <div class="card-top-bar">
+            <img src="./assets/chip.svg" alt="" class="card-chip-icon">
+            <span class="card-badge-tag">${escapeHtml(card.badge)} // ${escapeHtml(statusTag)}</span>
+          </div>
+          <div class="card-pan-display">${escapeHtml(card.cardNumber)}</div>
+          <div class="card-Details-row">
+            <span class="card-holder-name">${escapeHtml(card.cardHolder)}</span>
+            <span class="card-pin-hint">${pinInfo}</span>
+          </div>
+          ${card.accountsHint ? `<div class="card-Details-row"><span class="card-slot-caption" style="color: rgba(255,255,255,0.78);">${escapeHtml(card.accountsHint)}</span></div>` : ''}
+          <button
+            type="button"
+            class="card-insert-btn"
+            data-insert-pan="${escapeHtml(card.cardNumber)}"
+            ${!isIdle ? 'disabled' : ''}
+          >
+            ${isCurrent ? 'Card Currently Inserted' : 'Insert Card into ATM'}
+          </button>
+        </article>
+      `;
+    }).join('');
 
-        const expireToggleBtn =
-          card.id === 'card-zero'
-            ? `<button
-                type="button"
-                class="card-insert-btn"
-                data-toggle-exp="${escapeHtml(card.cardNumber)}"
-                ${!isIdle ? 'disabled' : ''}
-              >
-                Mode: ${card.expired ? 'Expired Card (Switch to $0.00)' : '$0.00 Balance (Switch to Expired)'}
-              </button>`
-            : '';
+    const customPanFormHtml = `
+      <form id="custom-pan-form" class="hardware-module" style="gap:8px;">
+        <label for="custom-pan-input" class="module-title">CUSTOM CARD PAN</label>
+        <div style="display:flex; gap:6px;">
+          <input
+            type="text"
+            id="custom-pan-input"
+            class="screen-input"
+            placeholder="e.g. 4111-0000-1111-2222"
+            autocomplete="off"
+            ${!isIdle ? 'disabled' : ''}
+            required
+          >
+          <button type="submit" class="screen-btn" ${!isIdle ? 'disabled' : ''}>
+            Insert
+          </button>
+        </div>
+      </form>
+    `;
 
-        return `
-          <article class="test-card-item ${escapeHtml(card.theme)} ${isCurrent ? 'active-card' : ''}">
-            <div class="card-top-bar">
-              <img src="./assets/chip.svg" alt="" class="card-chip-icon">
-              <span class="card-badge-tag">${escapeHtml(card.badge)} // ${escapeHtml(statusTags.join(' '))}</span>
-            </div>
-            <div class="card-pan-display">${escapeHtml(card.cardNumber)}</div>
-            <div class="card-Details-row">
-              <span class="card-holder-name">${escapeHtml(card.cardHolder)}</span>
-              <span class="card-pin-hint">${pinInfo}</span>
-            </div>
-            ${expireToggleBtn}
-            <button
-              type="button"
-              class="card-insert-btn"
-              data-insert-pan="${escapeHtml(card.cardNumber)}"
-              ${!isIdle ? 'disabled' : ''}
-            >
-              ${isCurrent ? 'Card Currently Inserted' : 'Insert Card into ATM'}
-            </button>
-          </article>
-        `;
-      })
-      .join('');
+    this._walletRoot.innerHTML = `${cardsHtml}${customPanFormHtml}`;
 
     this._walletRoot.querySelectorAll('[data-insert-pan]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -161,14 +164,17 @@ export class CardSlotComponent {
       });
     });
 
-    this._walletRoot.querySelectorAll('[data-toggle-exp]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const pan = btn.getAttribute('data-toggle-exp');
-        if (pan) {
-          toggleTestCardExpired(pan);
-          this._renderWallet(store.getState());
+    const customForm = qs('#custom-pan-form', this._walletRoot);
+    const customInput = qs('#custom-pan-input', this._walletRoot);
+    if (customForm && customInput) {
+      customForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const pan = customInput.value.trim();
+        wipeInput(customInput);
+        if (pan && typeof this._onInsertCard === 'function') {
+          this._onInsertCard(pan);
         }
       });
-    });
+    }
   }
 }

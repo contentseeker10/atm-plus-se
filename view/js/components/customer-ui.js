@@ -523,6 +523,18 @@ export class CustomerUiComponent {
       }
     });
 
+    const externalDestOptions = [];
+    if (state.cardNumber !== '4111-5555-6666-7777') {
+      externalDestOptions.push(
+        '<option value="4111-5555-6666-7777">Olena Kovalenko (4111-5555-6666-7777 / CHK-7777)</option>'
+      );
+    }
+    if (state.cardNumber !== '4111-2222-3333-4444') {
+      externalDestOptions.push(
+        '<option value="4111-2222-3333-4444">Ivan Petrenko (4111-2222-3333-4444 / CHK-4444)</option>'
+      );
+    }
+
     this._viewportEl.innerHTML = `
       <div class="screen-panel">
         <div>
@@ -537,8 +549,20 @@ export class CustomerUiComponent {
             <label for="transfer-dest-select" class="screen-label">DESTINATION ACCOUNT OR CARD:</label>
             <select id="transfer-dest-select" class="screen-select">
               <option value="${escapeHtml(defaultTo)}">Own ${escapeHtml(defaultTo)} Account</option>
-              <option value="4111-8888-9999-0000">External Card (4111-8888-9999-0000)</option>
+              ${externalDestOptions.join('')}
+              <option value="CUSTOM">Custom Card or Account ID...</option>
             </select>
+          </div>
+
+          <div id="transfer-custom-row" class="screen-form-row hidden">
+            <label for="transfer-custom-target" class="screen-label">CUSTOM ACCOUNT ID OR CARD NUMBER:</label>
+            <input
+              type="text"
+              id="transfer-custom-target"
+              class="screen-input"
+              placeholder="e.g. SAV-7777, CHK-4444, or 4111-..."
+              autocomplete="off"
+            >
           </div>
 
           <div class="screen-form-row">
@@ -564,13 +588,37 @@ export class CustomerUiComponent {
 
     const form = qs('#transfer-form', this._viewportEl);
     const destSelect = qs('#transfer-dest-select', this._viewportEl);
+    const customRow = qs('#transfer-custom-row', this._viewportEl);
+    const customInput = qs('#transfer-custom-target', this._viewportEl);
     const amountInput = qs('#transfer-amount-input', this._viewportEl);
+
+    if (destSelect && customRow && customInput) {
+      destSelect.addEventListener('change', () => {
+        const isCustom = destSelect.value === 'CUSTOM';
+        customRow.classList.toggle('hidden', !isCustom);
+        customInput.required = isCustom;
+        if (!isCustom) {
+          wipeInput(customInput);
+        }
+      });
+    }
+
     if (form && destSelect && amountInput) {
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         const dollars = Number(amountInput.value);
-        const target = destSelect.value;
+        let target = destSelect.value;
+        if (target === 'CUSTOM' && customInput) {
+          target = customInput.value.trim();
+          wipeInput(customInput);
+        }
         wipeInput(amountInput);
+        if (!target) {
+          store.setState({
+            alert: { type: 'error', message: 'Please enter a destination account ID or card number.' }
+          });
+          return;
+        }
         if (!Number.isFinite(dollars) || dollars <= 0) {
           store.setState({
             alert: { type: 'error', message: 'Please enter a valid positive transfer amount.' }

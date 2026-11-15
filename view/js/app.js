@@ -5,7 +5,7 @@ import {
   FSM_STATES,
   store
 } from './state.js';
-import { api, resetMockState } from './api.js';
+import { api } from './api.js';
 import { CardSlotComponent } from './components/card-slot.js';
 import { PinPadComponent } from './components/pin-pad.js';
 import { BillAcceptorComponent } from './components/bill-acceptor.js';
@@ -51,13 +51,8 @@ class AtmSimulatorApp {
     this._timeoutPillEl = qs('#timeout-pill');
     this._timeoutCounterEl = qs('#timeout-counter');
 
-    this._mockRadio = qs('#mode-mock-radio');
-    this._liveRadio = qs('#mode-live-radio');
-    this._mockIndicator = qs('#mode-mock-indicator');
-    this._liveIndicator = qs('#mode-live-indicator');
     this._apiUrlInput = qs('#api-base-url-input');
     this._applyUrlBtn = qs('#apply-api-url-btn');
-    this._resetMockBtn = qs('#reset-mock-btn');
   }
 
   _initComponents() {
@@ -167,19 +162,6 @@ class AtmSimulatorApp {
   }
 
   _bindEnvironmentBar() {
-    const onModeChange = () => {
-      const useMock = Boolean(this._mockRadio?.checked);
-      updateConfig({ useMock });
-      this._syncEnvironmentBar();
-      this.handleEjectCard({
-        type: 'info',
-        message: `Switched adapter to ${useMock ? 'Mock Mode (In-Memory Emulator)' : `Live Backend (${CONFIG.API_BASE_URL})`}.`
-      });
-    };
-
-    this._mockRadio?.addEventListener('change', onModeChange);
-    this._liveRadio?.addEventListener('change', onModeChange);
-
     this._applyUrlBtn?.addEventListener('click', () => {
       const nextUrl = this._apiUrlInput?.value || '';
       updateConfig({ apiBaseUrl: nextUrl });
@@ -188,28 +170,9 @@ class AtmSimulatorApp {
         alert: { type: 'info', message: `API Base URL updated to ${CONFIG.API_BASE_URL}` }
       });
     });
-
-    this._resetMockBtn?.addEventListener('click', () => {
-      this._timer.stop();
-      this._pinPad.clearBuffer();
-      this._billAcceptor.clearStagedBills();
-      resetMockState();
-      store.resetSession({
-        type: 'info',
-        message: 'Mock state reset: all accounts, cassettes, PIN attempts, and audit log restored.'
-      });
-    });
   }
 
   _syncEnvironmentBar() {
-    if (this._mockRadio) this._mockRadio.checked = CONFIG.USE_MOCK;
-    if (this._liveRadio) this._liveRadio.checked = !CONFIG.USE_MOCK;
-    if (this._mockIndicator) {
-      this._mockIndicator.textContent = CONFIG.USE_MOCK ? '[x] Mock Mode' : '[ ] Mock Mode';
-    }
-    if (this._liveIndicator) {
-      this._liveIndicator.textContent = !CONFIG.USE_MOCK ? '[x] Live Backend' : '[ ] Live Backend';
-    }
     if (this._apiUrlInput) {
       this._apiUrlInput.value = CONFIG.API_BASE_URL;
     }
