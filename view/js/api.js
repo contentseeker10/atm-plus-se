@@ -83,29 +83,65 @@ export const api = {
       Authorization: `Bearer ${token}`
     });
   },
-  withdraw(token, accountType, amountCents) {
+  withdraw(token, accountType, amountCents, nonce) {
     return request(
       'POST',
       '/customer/withdraw',
-      { accountType, amount: amountCents },
+      {
+        accountType,
+        amount: amountCents,
+        idempotencyKey: generateIdempotencyKey(),
+        nonce
+      },
       { Authorization: `Bearer ${token}` }
     );
   },
-  deposit(token, accountType, bills) {
+  deposit(token, accountType, bills, nonce) {
     return request(
       'POST',
       '/customer/deposit',
-      { accountType, bills },
+      {
+        accountType,
+        bills,
+        idempotencyKey: generateIdempotencyKey(),
+        nonce
+      },
       { Authorization: `Bearer ${token}` }
     );
   },
-  transfer(token, from, to, amountCents) {
+  transfer(token, from, to, amountCents, nonce) {
     return request(
       'POST',
       '/customer/transfer',
-      { from, to, amount: amountCents, idempotencyKey: generateIdempotencyKey() },
+      {
+        from,
+        to,
+        amount: amountCents,
+        idempotencyKey: generateIdempotencyKey(),
+        nonce
+      },
       { Authorization: `Bearer ${token}` }
     );
+  },
+  getAutoPayments(token) {
+    return request('GET', '/customer/autopay', null, {
+      Authorization: `Bearer ${token}`
+    });
+  },
+  createAutoPayment(token, payload) {
+    return request('POST', '/customer/autopay', payload, {
+      Authorization: `Bearer ${token}`
+    });
+  },
+  runAutoPayments(token) {
+    return request('POST', '/customer/autopay/run', {}, {
+      Authorization: `Bearer ${token}`
+    });
+  },
+  deleteAutoPayment(token, ruleId) {
+    return request('POST', '/customer/autopay/delete', { ruleId }, {
+      Authorization: `Bearer ${token}`
+    });
   },
   getVaultDiagnostics(token, masterKey) {
     return request('GET', '/engineer/vault', null, {
@@ -149,6 +185,28 @@ export const api = {
       'POST',
       '/engineer/verify-integrity',
       {},
+      {
+        Authorization: `Bearer ${token}`,
+        'X-Master-Key': masterKey
+      }
+    );
+  },
+  unlockCard(token, masterKey, cardNumber) {
+    return request(
+      'POST',
+      '/engineer/unlock-card',
+      { cardNumber },
+      {
+        Authorization: `Bearer ${token}`,
+        'X-Master-Key': masterKey
+      }
+    );
+  },
+  simulateTamper(token, masterKey, restore = false) {
+    return request(
+      'POST',
+      '/engineer/simulate-tamper',
+      { restore },
       {
         Authorization: `Bearer ${token}`,
         'X-Master-Key': masterKey

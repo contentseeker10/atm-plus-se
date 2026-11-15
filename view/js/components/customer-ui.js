@@ -50,6 +50,9 @@ export class CustomerUiComponent {
         case CUSTOMER_VIEWS.TRANSFER:
           this._renderTransfer(state);
           break;
+        case CUSTOMER_VIEWS.AUTOPAY:
+          this._renderAutoPay(state);
+          break;
         case CUSTOMER_VIEWS.DISPENSING:
           this._renderDispensing(state);
           break;
@@ -150,6 +153,10 @@ export class CustomerUiComponent {
       F5: {
         label: `Use ${nextAccType}`,
         action: () => store.setState({ selectedAccountType: nextAccType, alert: null })
+      },
+      F6: {
+        label: 'Auto-Payments',
+        action: () => this._actions.openAutoPay()
       },
       F8: {
         label: 'Eject Card',
@@ -456,6 +463,21 @@ export class CustomerUiComponent {
           </span>
         </div>
 
+        <div class="quick-amounts-grid">
+          ${CONFIG.DENOMINATIONS_CENTS.map(
+            (cents) => `
+              <button
+                type="button"
+                class="screen-btn"
+                data-add-denom="${cents}"
+                ${state.isBusy ? 'disabled' : ''}
+              >
+                +${formatDenomLabel(cents)} Note
+              </button>
+            `
+          ).join('')}
+        </div>
+
         <div style="display:flex; gap:8px; justify-content:flex-end;">
           <button
             type="button"
@@ -476,6 +498,15 @@ export class CustomerUiComponent {
         </div>
       </div>
     `;
+
+    this._viewportEl.querySelectorAll('[data-add-denom]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cents = Number(btn.getAttribute('data-add-denom'));
+        if (cents > 0) {
+          this._actions.addDepositBill(cents);
+        }
+      });
+    });
 
     const clearBtn = qs('#screen-clear-deposit-btn', this._viewportEl);
     if (clearBtn) {
@@ -626,6 +657,260 @@ export class CustomerUiComponent {
           return;
         }
         this._actions.transfer(fromType, target, Math.round(dollars * 100));
+      });
+    }
+  }
+
+  _renderAutoPay(state) {
+    const defaultFrom = state.selectedAccountType === 'Savings' ? 'Savings' : 'Checking';
+    const oppositeOwn = defaultFrom === 'Checking' ? 'Savings' : 'Checking';
+
+    store.setSideKeys({
+      F5: {
+        label: 'Execute Due APS',
+        variant: 'primary',
+        action: () => this._actions.runAutoPay()
+      },
+      F7: {
+        label: 'Main Menu',
+        action: () => store.setState({ customerView: CUSTOMER_VIEWS.MENU, alert: null })
+      },
+      F8: {
+        label: 'Eject Card',
+        variant: 'danger',
+        action: () => this._actions.ejectCard()
+      }
+    });
+
+    const externalDestOptions = [];
+    if (state.cardNumber !== '4111-5555-6666-7777') {
+      externalDestOptions.push(
+        '<option value="4111-5555-6666-7777">Olena Kovalenko (4111-5555-6666-7777 / CHK-7777)</option>'
+      );
+    }
+    if (state.cardNumber !== '4111-2222-3333-4444') {
+      externalDestOptions.push(
+        '<option value="4111-2222-3333-4444">Ivan Petrenko (4111-2222-3333-4444 / CHK-4444)</option>'
+      );
+    }
+
+    const rules = Array.isArray(state.apsRules) ? state.apsRules : [];
+    const rulesHtml =
+      rules.length === 0
+        ? `
+          <div class="account-card">
+            <span class="account-meta">No auto-payment rules registered for this customer.</span>
+          </div>
+        `
+        : rules
+            .map(
+              (rule) => `
+                <div class="account-card" style="padding:8px 10px; gap:4px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                    <span class="account-type-label">
+                      ${escapeHtml(rule.ruleId)} // ${escapeHtml(rule.from)} -&gt; ${escapeHtml(rule.to)}
+                    </span>
+                    <button
+                      type="button"
+                      class="screen-btn screen-btn-danger"
+                      style="padding:3px 8px; font-size:0.68rem;"
+                      data-del-rule="${escapeHtml(rule.ruleId)}"
+                      ${state.isBusy ? 'disabled' : ''}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                    <span class="account-balance-value" style="font-size:0.95rem;">
+                      ${escapeHtml(formatCents(rule.amountCents))}
+                    </span>
+                    <span class="account-meta">
+                      ${rule.fixedAmount ? 'Fixed (FAS)' : 'Variable (VAS)'} | Every ${escapeHtml(rule.periodSeconds)}s | Runs: ${escapeHtml(rule.runCount)}
+                    </span>
+                  </div>
+                </div>
+              `
+            )
+            .join('');
+
+    this._viewportEl.innerHTML = `
+      <div class="screen-panel" style="gap:10px;">
+        <div>
+          <h2 class="screen-title">AUTOMATIC PAYMENTS (APS)</h2>
+          <p class="screen-subtitle">
+            Configure recurring Fixed (FAS) or Variable (VAS) scheduled transfers and execute due rules.
+          </p>
+        </div>
+
+        <div style="max-height:132px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
+          ${rulesHtml}
+        </div>
+
+        <form id="autopay-create-form" class="screen-panel" style="gap:8px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="screen-form-row">
+              <label for="autopay-from" class="screen-label">FROM ACCOUNT:</label>
+              <select id="autopay-from" class="screen-select">
+                <option value="Checking" ${defaultFrom === 'Checking' ? 'selected' : ''}>Checking</option>
+                <option value="Savings" ${defaultFrom === 'Savings' ? 'selected' : ''}>Savings</option>
+              </select>
+            </div>
+            <div class="screen-form-row">
+              <label for="autopay-to-select" class="screen-label">DESTINATION:</label>
+              <select id="autopay-to-select" class="screen-select">
+                <option value="${escapeHtml(oppositeOwn)}">Own ${escapeHtml(oppositeOwn)} Account</option>
+                <option value="${escapeHtml(defaultFrom)}">Own ${escapeHtml(defaultFrom)} Account</option>
+                ${externalDestOptions.join('')}
+                <option value="CUSTOM">Custom Account ID or Card...</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="autopay-to-custom-row" class="screen-form-row hidden">
+            <label for="autopay-to-custom" class="screen-label">CUSTOM ACCOUNT ID OR CARD NUMBER:</label>
+            <input
+              type="text"
+              id="autopay-to-custom"
+              class="screen-input"
+              placeholder="e.g. CHK-7777, SAV-4444, or 4111-..."
+              autocomplete="off"
+            >
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+            <div class="screen-form-row">
+              <label for="autopay-amount" class="screen-label">AMOUNT (USD):</label>
+              <input
+                type="number"
+                id="autopay-amount"
+                class="screen-input"
+                min="1"
+                step="0.01"
+                placeholder="e.g. 25.00"
+                required
+              >
+            </div>
+            <div class="screen-form-row">
+              <label for="autopay-mode" class="screen-label">PAYMENT MODE:</label>
+              <select id="autopay-mode" class="screen-select">
+                <option value="fixed">Fixed (FAS)</option>
+                <option value="variable">Variable (VAS)</option>
+              </select>
+            </div>
+            <div class="screen-form-row">
+              <label for="autopay-period" class="screen-label">PERIOD (SEC):</label>
+              <input
+                type="number"
+                id="autopay-period"
+                class="screen-input"
+                min="0"
+                step="1"
+                value="0"
+                required
+              >
+            </div>
+          </div>
+
+          <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+            <button
+              type="button"
+              id="autopay-run-btn"
+              class="screen-btn"
+              ${state.isBusy ? 'disabled' : ''}
+            >
+              Execute Due Auto-Payments
+            </button>
+            <button
+              type="submit"
+              class="screen-btn screen-btn-primary"
+              ${state.isBusy ? 'disabled' : ''}
+            >
+              Register Auto-Payment
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    this._viewportEl.querySelectorAll('[data-del-rule]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const ruleId = btn.getAttribute('data-del-rule');
+        if (ruleId) {
+          this._actions.deleteAutoPay(ruleId);
+        }
+      });
+    });
+
+    qs('#autopay-run-btn', this._viewportEl)?.addEventListener('click', () => {
+      this._actions.runAutoPay();
+    });
+
+    const form = qs('#autopay-create-form', this._viewportEl);
+    const fromSelect = qs('#autopay-from', this._viewportEl);
+    const toSelect = qs('#autopay-to-select', this._viewportEl);
+    const customRow = qs('#autopay-to-custom-row', this._viewportEl);
+    const customInput = qs('#autopay-to-custom', this._viewportEl);
+    const amountInput = qs('#autopay-amount', this._viewportEl);
+    const modeSelect = qs('#autopay-mode', this._viewportEl);
+    const periodInput = qs('#autopay-period', this._viewportEl);
+
+    if (toSelect && customRow && customInput) {
+      toSelect.addEventListener('change', () => {
+        const isCustom = toSelect.value === 'CUSTOM';
+        customRow.classList.toggle('hidden', !isCustom);
+        customInput.required = isCustom;
+        if (!isCustom) {
+          wipeInput(customInput);
+        }
+      });
+    }
+
+    if (form && fromSelect && toSelect && amountInput && modeSelect && periodInput) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const from = fromSelect.value;
+        let to = toSelect.value;
+        if (to === 'CUSTOM' && customInput) {
+          to = customInput.value.trim();
+        }
+        const dollars = Number(amountInput.value);
+        const periodSeconds = Number(periodInput.value);
+        const fixedAmount = modeSelect.value === 'fixed';
+
+        if (!to) {
+          store.setState({
+            alert: { type: 'error', message: 'Please enter a destination account ID or card number.' }
+          });
+          return;
+        }
+        if (to === from) {
+          store.setState({
+            alert: { type: 'error', message: 'Source and destination accounts must differ.' }
+          });
+          return;
+        }
+        if (!Number.isFinite(dollars) || dollars <= 0) {
+          store.setState({
+            alert: { type: 'error', message: 'Please enter a valid positive amount.' }
+          });
+          return;
+        }
+        if (!Number.isInteger(periodSeconds) || periodSeconds < 0) {
+          store.setState({
+            alert: { type: 'error', message: 'Period in seconds must be a non-negative integer.' }
+          });
+          return;
+        }
+
+        wipeInput(amountInput);
+        if (customInput) wipeInput(customInput);
+        this._actions.createAutoPay({
+          from,
+          to,
+          amount: Math.round(dollars * 100),
+          fixedAmount,
+          periodSeconds
+        });
       });
     }
   }

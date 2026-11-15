@@ -199,6 +199,23 @@
     </div>
   </footer>
 
-  <script type="module" src="./js/app.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "./js/state.js": "./js/state.js?v=2",
+        "./js/api.js": "./js/api.js?v=2",
+        "./js/config.js": "./js/config.js?v=2",
+        "./js/components/card-slot.js": "./js/components/card-slot.js?v=2",
+        "./js/components/pin-pad.js": "./js/components/pin-pad.js?v=2",
+        "./js/components/bill-acceptor.js": "./js/components/bill-acceptor.js?v=2",
+        "./js/components/receipt.js": "./js/components/receipt.js?v=2",
+        "./js/components/customer-ui.js": "./js/components/customer-ui.js?v=2",
+        "./js/components/engineer-ui.js": "./js/components/engineer-ui.js?v=2",
+        "./js/utils/dom.js": "./js/utils/dom.js?v=2",
+        "./js/utils/timer.js": "./js/utils/timer.js?v=2"
+      }
+    }
+  </script>
+  <script type="module" src="./js/app.js?v=2"></script>
 </body>
 </html>

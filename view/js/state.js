@@ -11,6 +11,7 @@ export const CUSTOMER_VIEWS = Object.freeze({
   WITHDRAW: 'WITHDRAW',
   DEPOSIT: 'DEPOSIT',
   TRANSFER: 'TRANSFER',
+  AUTOPAY: 'AUTOPAY',
   DISPENSING: 'DISPENSING',
   COMPLETE: 'COMPLETE'
 });
@@ -43,8 +44,11 @@ const initialState = {
   lastReceipt: null,
   vaultStatus: null,
   auditRecords: [],
+  apsRules: [],
   integrityStatus: null,
   timeoutRemainingSec: 0,
+  sessionNonce: 0,
+  cardStatusOverrides: {},
   sideKeys: {
     F1: null, F2: null, F3: null, F4: null,
     F5: null, F6: null, F7: null, F8: null
@@ -85,9 +89,16 @@ class Store {
     this._sideKeyListener = listener;
   }
 
+  nextSessionNonce() {
+    const next = (this._state.sessionNonce || 0) + 1;
+    this._state = { ...this._state, sessionNonce: next };
+    return next;
+  }
+
   resetSession(alert = null) {
     this._state = {
       ...structuredClone(initialState),
+      cardStatusOverrides: this._state.cardStatusOverrides || {},
       alert
     };
     this._notify();

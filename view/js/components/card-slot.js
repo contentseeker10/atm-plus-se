@@ -103,24 +103,39 @@ export class CardSlotComponent {
     const isIdle = state.fsmState === FSM_STATES.IDLE && !state.isBusy;
 
     const cardsHtml = DEMO_CARDS.map((card) => {
+      const override = state.cardStatusOverrides?.[card.cardNumber] || {};
+      const isBlocked =
+        override.blocked !== undefined ? Boolean(override.blocked) : Boolean(card.blocked);
+      const accountsHint =
+        override.accountsHint !== undefined ? override.accountsHint : card.accountsHint;
+      const themeClass = isBlocked
+        ? 'theme-blocked-red'
+        : card.blocked
+          ? 'theme-customer-blue'
+          : card.theme;
+      const badgeLabel = isBlocked
+        ? 'CARD BLOCKED'
+        : card.blocked
+          ? 'UNLOCKED CARD'
+          : card.badge;
       const isCurrent = state.cardNumber === card.cardNumber;
-      const statusTag = card.blocked ? 'BLOCKED' : card.role.toUpperCase();
-      const pinInfo = card.blocked
+      const statusTag = isBlocked ? 'BLOCKED' : card.role.toUpperCase();
+      const pinInfo = isBlocked
         ? 'STATUS: BLOCKED'
         : `PIN: ${escapeHtml(card.pin)}${card.masterKey ? ` | KEY: ${escapeHtml(card.masterKey)}` : ''}`;
 
       return `
-        <article class="test-card-item ${escapeHtml(card.theme)} ${isCurrent ? 'active-card' : ''}">
+        <article class="test-card-item ${escapeHtml(themeClass)} ${isCurrent ? 'active-card' : ''}">
           <div class="card-top-bar">
             <img src="./assets/chip.svg" alt="" class="card-chip-icon">
-            <span class="card-badge-tag">${escapeHtml(card.badge)} // ${escapeHtml(statusTag)}</span>
+            <span class="card-badge-tag">${escapeHtml(badgeLabel)} // ${escapeHtml(statusTag)}</span>
           </div>
           <div class="card-pan-display">${escapeHtml(card.cardNumber)}</div>
           <div class="card-Details-row">
             <span class="card-holder-name">${escapeHtml(card.cardHolder)}</span>
             <span class="card-pin-hint">${pinInfo}</span>
           </div>
-          ${card.accountsHint ? `<div class="card-Details-row"><span class="card-slot-caption" style="color: rgba(255,255,255,0.78);">${escapeHtml(card.accountsHint)}</span></div>` : ''}
+          ${accountsHint ? `<div class="card-Details-row"><span class="card-slot-caption" style="color: rgba(255,255,255,0.78);">${escapeHtml(accountsHint)}</span></div>` : ''}
           <button
             type="button"
             class="card-insert-btn"
