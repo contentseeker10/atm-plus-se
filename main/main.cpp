@@ -24,11 +24,13 @@
 
 #include "security/anti_replay.hpp"
 
-#include <future>
-#include <iostream>
+#include "storage/operations.hpp"
+#include "storage/seed.hpp"
+
 #include <map>
 #include <memory>
 #include <print>
+#include <string>
 #include <string_view>
 
 constexpr std::string_view DB_PATH     = "./atm.db";
@@ -50,23 +52,35 @@ int main()
     try
     {
         log("Starting server...");
-    
-        log("Initializing Cash Vault...");
-        std::map<Denomination, Cassette> cassettes = {
-            { Denomination::D_10, Cassette(Denomination::D_10, 10, 100) },
-            { Denomination::D_20, Cassette(Denomination::D_20, 10, 100) },
-            { Denomination::D_50, Cassette(Denomination::D_50, 10, 100) },
-            { Denomination::D_100, Cassette(Denomination::D_100, 10, 100) },
-            { Denomination::D_200, Cassette(Denomination::D_200, 10, 100) },
-            { Denomination::D_500, Cassette(Denomination::D_500, 10, 100) },
-        };
-        auto vault = std::make_unique<CashVault>(cassettes);
 
         log("Initializing Database Manager...");
         auto db = std::make_shared<DatabaseManager>(DB_PATH);
 
+        log("Seeding Database and Loading Cash Vault...");
+        std::map<Denomination, Cassette> cassettes;
+        const auto seeded = db->execute_transaction(
+            [&](sqlite3* raw)
+            {
+                if (!storage::seed_demo_data(raw)) return false;
+                auto loaded = storage::load_cassettes(raw);
+                if (!loaded) return false;
+                cassettes = std::move(*loaded);
+                return true;
+            });
+        if (!seeded)
+        {
+            log("Failed to seed or load database.", true);
+            return 1;
+        }
+        auto vault = std::make_unique<CashVault>(std::move(cassettes));
+
         log("Initializing Audit Log...");
         auto audit = std::make_shared<AuditLog>(db, HMAC_SECRET);
+        if (!audit->load_from_database())
+        {
+            log("Failed to load audit log from database.", true);
+            return 1;
+        }
 
         log("Initializing Auth Service...");
         auto auth = std::make_unique<AuthService>(db, audit);
@@ -83,10 +97,8 @@ int main()
         log("Initializing HTTP Server Adapter...");
         HttpServerAdapter http(controller);
 
-        log("Starting HTTP Server...");
-        auto t = std::async([&http]() { http.start(); });
-
         log("Server successfully started.");
+        http.start();
     }
     catch(const std::exception& e) { log(e.what(), true); }
 
