@@ -14,6 +14,8 @@
 
 #include "account.hpp"
 
+#include <cstdint>
+
 class SavingsAccount final : public Account
 {
 public:
@@ -27,6 +29,12 @@ public:
 
     double get_annual_interest_rate() const noexcept { return _annual_interest_rate; }
 
+    std::int32_t get_interest_rate_bps() const noexcept { return _interest_rate_bps; }
+
+    std::int64_t calculate_interest_cents(int days = 365) const noexcept;
+
+    std::expected<std::int64_t, AccountError> apply_interest(int days = 365);
+
     std::int64_t get_minimum_balance_cents() const noexcept
     { return _minimum_balance_cents; }
 
@@ -34,5 +42,6 @@ public:
 
 private:
     double _annual_interest_rate;
+    std::int32_t _interest_rate_bps{};
     std::int64_t _minimum_balance_cents;
 };

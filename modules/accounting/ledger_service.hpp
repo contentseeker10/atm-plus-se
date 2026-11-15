@@ -42,7 +42,10 @@ enum class LedgerError
     InvalidRule
 };
 
+class DatabaseManager;
+
 inline constexpr std::string_view ATM_VAULT_ACCOUNT_ID = "ATM_VAULT";
+inline constexpr std::string_view BANK_TREASURY_ACCOUNT_ID = "BANK_TREASURY";
 
 struct ApsRule
 {
@@ -91,11 +94,27 @@ public:
                                                            std::int64_t amount_cents,
                                                            std::uint64_t nonce);
 
+    std::expected<void, LedgerError> withdraw_from_account(Account& account,
+                                                           std::int64_t amount_cents,
+                                                           std::uint64_t nonce);
+
+    std::expected<void, LedgerError> deposit_to_account(Account& account,
+                                                        std::int64_t amount_cents,
+                                                        std::uint64_t nonce);
+
+    std::expected<std::int64_t, LedgerError> accrue_interest(SavingsAccount& savings,
+                                                             std::uint64_t nonce,
+                                                             int days = 365);
+
     std::expected<void, LedgerError> register_aps_rule(ApsRule rule);
 
     ApsRunResult run_aps(
         std::chrono::system_clock::time_point now,
-        const std::function<Account*(const std::string&)>& resolve_account);
+        const std::function<Account*(const std::string&)>& resolve_account,
+        const std::function<bool(const Account&, const Account&)>& persist_accounts = {});
+
+    ApsRunResult run_aps(std::chrono::system_clock::time_point now,
+                         DatabaseManager& db);
 
     InvCheckReport inv_check(const std::vector<const Account*>& accounts,
                              std::int64_t vault_cash_cents,

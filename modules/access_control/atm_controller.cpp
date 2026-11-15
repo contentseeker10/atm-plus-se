@@ -33,8 +33,6 @@
 #include <type_traits>
 #include <utility>
 
-inline constexpr std::string_view BANK_TREASURY_ACCOUNT_ID = "BANK_TREASURY";
-
 static_assert(std::is_nothrow_move_assignable_v<CashVault>);
 static_assert(std::is_copy_constructible_v<CashVault>);
 
