@@ -153,7 +153,16 @@ class AtmSimulatorApp {
         simulateTamper: (restore) => this.handleSimulateTamper(restore),
         resetHardwareCounters: () => this.handleResetHardwareCounters(),
         openAuditView: (customAlert = null) => this.handleOpenAuditView(customAlert),
-        verifyAuditIntegrity: () => this.handleVerifyIntegrity()
+        verifyAuditIntegrity: () => this.handleVerifyIntegrity(),
+        openAdminView: () => this.handleOpenAdminView(),
+        refreshAdminCards: () => this.handleRefreshAdminCards(),
+        issueCard: (payload) => this.handleIssueCard(payload),
+        revokeCard: (cardNumber) => this.handleRevokeCard(cardNumber),
+        setCardAccess: (payload) => this.handleSetCardAccess(payload),
+        applyAuditFilter: (filter) => this.handleApplyAuditFilter(filter),
+        setAuditFilterField: (field, value) => this.handleSetAuditFilterField(field, value),
+        exportAuditCsv: () => this.handleExportAuditCsv(),
+        forceVaultDoor: () => this.handleForceVaultDoor()
       }
     });
   }
@@ -700,6 +709,193 @@ class AtmSimulatorApp {
         engineerView: ENGINEER_VIEWS.VAULT,
         isBusy: false,
         busyMessage: ''
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: err.message }
+      });
+    }
+  }
+
+  async handleOpenAdminView() {
+    store.setState({ engineerView: ENGINEER_VIEWS.ADMIN, alert: null });
+    await this.handleRefreshAdminCards();
+  }
+
+  async handleRefreshAdminCards() {
+    const { token, masterKey } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      const res = await this._withBusy('LOADING CARD REGISTRY...', () =>
+        api.listCards(token, masterKey)
+      );
+      store.setState({
+        adminCards: res.cards || [],
+        isBusy: false,
+        busyMessage: ''
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: err.message }
+      });
+    }
+  }
+
+  async handleIssueCard(payload) {
+    const { token, masterKey } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      await this._withBusy('ISSUING CARD...', () =>
+        api.issueCard(token, masterKey, payload)
+      );
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'success', message: `Card ${payload.cardNumber} issued.` }
+      });
+      await this.handleRefreshAdminCards();
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: err.message }
+      });
+    }
+  }
+
+  async handleRevokeCard(cardNumber) {
+    const { token, masterKey } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      await this._withBusy(`REVOKING CARD ${cardNumber}...`, () =>
+        api.revokeCard(token, masterKey, cardNumber)
+      );
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'warn',
+          message: `Card ${cardNumber} revoked. Further access attempts are denied.`
+        }
+      });
+      await this.handleRefreshAdminCards();
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: err.message }
+      });
+    }
+  }
+
+  async handleSetCardAccess(payload) {
+    const { token, masterKey } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      await this._withBusy('UPDATING ACCESS RIGHTS...', () =>
+        api.setCardAccess(token, masterKey, payload)
+      );
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'success', message: `Access policy updated for ${payload.cardNumber}.` }
+      });
+      await this.handleRefreshAdminCards();
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: err.message }
+      });
+    }
+  }
+
+  async handleApplyAuditFilter() {
+    const { token, masterKey, auditFilter } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      const res = await this._withBusy('FILTERING AUDIT LOG...', () =>
+        api.getAuditLog(token, masterKey, { filter: auditFilter })
+      );
+      store.setState({
+        auditRecords: res.records || [],
+        isBusy: false,
+        busyMessage: ''
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: err.message }
+      });
+    }
+  }
+
+  handleSetAuditFilterField(field, value) {
+    const { auditFilter } = store.getState();
+    store.setState({
+      auditFilter: { ...auditFilter, [field]: value }
+    });
+  }
+
+  async handleExportAuditCsv() {
+    const { token, masterKey, auditFilter } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      const csv = await this._withBusy('EXPORTING AUDIT REPORT...', () =>
+        api.exportAuditCsv(token, masterKey, auditFilter)
+      );
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `audit-report-${new Date().toISOString().slice(0, 19)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'success', message: 'Audit report exported as CSV.' }
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: err.message }
+      });
+    }
+  }
+
+  async handleForceVaultDoor() {
+    const { token, masterKey } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      await this._withBusy('FORCING SAFE DOOR OPEN...', () =>
+        api.setVaultDoor(token, masterKey, true, true)
+      );
+      const vaultStatus = await api.getVaultDiagnostics(token, masterKey);
+      store.setState({
+        vaultStatus,
+        isBusy: false,
+        busyMessage: '',
+        engineerView: ENGINEER_VIEWS.VAULT,
+        alert: {
+          type: 'warn',
+          message: 'VAULT_DOOR_FORCED event recorded in the audit chain.'
+        }
       });
     } catch (err) {
       store.setState({
