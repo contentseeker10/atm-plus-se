@@ -186,10 +186,7 @@ namespace
         DatabaseManager& db, CustomerAccounts& accounts, std::string_view target,
         std::unique_ptr<Account>& external_owner)
     {
-        if (Account* own = resolve_own_account(target, accounts))
-        {
-            return own;
-        }
+        if (Account* own = resolve_own_account(target, accounts)) { return own; }
         if (auto loaded = db.load_account(target); loaded)
         {
             external_owner = std::move(*loaded);
@@ -205,7 +202,7 @@ namespace
         external_owner = std::move(*card_account);
         return external_owner.get();
     }
-}
+} // namespace
 
 AtmController::AtmController(std::unique_ptr<CashVault> vault,
                              std::shared_ptr<DatabaseManager> db,
@@ -214,17 +211,11 @@ AtmController::AtmController(std::unique_ptr<CashVault> vault,
                              std::shared_ptr<LedgerService> ledger,
                              std::shared_ptr<AntiReplayManager> anti_replay)
     : _db{std::move(db)}, _audit_log{std::move(log)}, _ledger{std::move(ledger)},
-      _anti_replay{std::move(anti_replay)},
-      _vault{std::move(vault)}, _auth_service{std::move(auth)}
+      _anti_replay{std::move(anti_replay)}, _vault{std::move(vault)},
+      _auth_service{std::move(auth)}
 {
-    if (!_anti_replay && _ledger)
-    {
-        _anti_replay = _ledger->get_anti_replay();
-    }
-    if (!_anti_replay)
-    {
-        _anti_replay = std::make_shared<AntiReplayManager>();
-    }
+    if (!_anti_replay && _ledger) { _anti_replay = _ledger->get_anti_replay(); }
+    if (!_anti_replay) { _anti_replay = std::make_shared<AntiReplayManager>(); }
     if (!_ledger && _audit_log)
     {
         _ledger = std::make_shared<LedgerService>(_audit_log, _anti_replay);
@@ -233,9 +224,7 @@ AtmController::AtmController(std::unique_ptr<CashVault> vault,
 AtmController::~AtmController() = default;
 
 void AtmController::transition_to(std::unique_ptr<IAtmState> new_state)
-{
-    _current_state = std::move(new_state);
-}
+{ _current_state = std::move(new_state); }
 
 void AtmController::start_session(const CardRecord& card, bool authenticated)
 {
@@ -247,10 +236,7 @@ void AtmController::start_session(const CardRecord& card, bool authenticated)
     auto session_id = crypto::generate_uuid_v4();
     SessionContext session(session_id, card);
     _active_session.emplace(session);
-    if (_anti_replay)
-    {
-        _anti_replay->register_session(session_id, 0);
-    }
+    if (_anti_replay) { _anti_replay->register_session(session_id, 0); }
     if (authenticated)
     {
         if (card.role == UserRole::Customer)
@@ -268,11 +254,10 @@ void AtmController::start_session(const CardRecord& card, bool authenticated)
     }
 }
 
-void AtmController::update_session(const CardRecord& card) {
+void AtmController::update_session(const CardRecord& card)
+{
     std::unique_lock lock(_mtx);
-    if (_active_session.has_value()) {
-        _active_session->record = card;
-    }
+    if (_active_session.has_value()) { _active_session->record = card; }
 }
 
 void AtmController::end_session() noexcept
@@ -305,7 +290,8 @@ std::expected<void, AtmError> AtmController::process_select_service(ServiceType 
     return _current_state->select_service(*this, service);
 }
 
-std::expected<void, AtmError> AtmController::process_eject_card() {
+std::expected<void, AtmError> AtmController::process_eject_card()
+{
     std::unique_lock lock(_mtx);
     return _current_state->eject_card(*this);
 }
@@ -317,13 +303,12 @@ std::expected<void, AtmError> AtmController::process_open_vault(
     return _current_state->open_vault(*this, engineer_key);
 }
 
-std::expected<CardRecord, AtmError> AtmController::validate_card(std::string_view card) {
+std::expected<CardRecord, AtmError> AtmController::validate_card(std::string_view card)
+{
     std::unique_lock lock(_mtx);
 
     auto result = _auth_service->validate_card(card);
-    if (!result) {
-        return std::unexpected(to_atm_error(result.error()));
-    }
+    if (!result) { return std::unexpected(to_atm_error(result.error())); }
 
     return result.value();
 }
@@ -345,17 +330,15 @@ std::expected<void, AtmError> AtmController::validate_session()
     return {};
 }
 
-std::expected<CardRecord, AtmError> AtmController::authenticate_card(
-    std::string_view pin)
+std::expected<CardRecord, AtmError> AtmController::authenticate_card(std::string_view pin)
 {
     std::unique_lock lock(_mtx);
 
     auto session = validate_session();
-    if (!session) {
-        return std::unexpected(session.error());
-    }
+    if (!session) { return std::unexpected(session.error()); }
 
-    auto auth_result = _auth_service->authenticate_card(_active_session->record.number, pin);
+    auto auth_result =
+        _auth_service->authenticate_card(_active_session->record.number, pin);
     if (!auth_result.has_value())
     {
         return std::unexpected(to_atm_error(auth_result.error()));
@@ -366,7 +349,7 @@ std::expected<CardRecord, AtmError> AtmController::authenticate_card(
 std::optional<std::string> AtmController::get_active_session_id() const
 {
     std::unique_lock lock(_mtx);
-    
+
     if (!_active_session.has_value()) { return std::nullopt; }
     if (_active_session->is_expired(kTimeout)) { return std::nullopt; }
     return _active_session->session_id;
@@ -382,9 +365,11 @@ std::optional<CardRecord> AtmController::get_active_card() const
     return _active_session->record;
 }
 
-UserRole AtmController::get_active_role() const {
+UserRole AtmController::get_active_role() const
+{
     std::unique_lock lock(_mtx);
-    if (!_active_session.has_value() || _active_session->is_expired(kTimeout)) {
+    if (!_active_session.has_value() || _active_session->is_expired(kTimeout))
+    {
         return UserRole::None;
     }
     return _active_session->record.role;
@@ -398,8 +383,8 @@ int AtmController::get_remaining_pin_attempts(std::string_view card) const
 }
 
 std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
-    int64_t amount_cents, std::string_view account_type,
-    std::string_view idempotency_key, std::optional<std::uint64_t> incoming_nonce)
+    int64_t amount_cents, std::string_view account_type, std::string_view idempotency_key,
+    std::optional<std::uint64_t> incoming_nonce)
 {
     std::unique_lock lock(_mtx);
 
@@ -436,11 +421,11 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
     const std::size_t audit_mark = _audit_log->size();
 
     const auto posted =
-        is_checking ? _ledger->withdraw_with_overdraft(
-                          *accounts->checking, *accounts->savings, amount_cents, nonce,
-                          idempotency_key)
-                    : _ledger->withdraw_from_account(*accounts->savings, amount_cents, nonce,
-                                                     idempotency_key);
+        is_checking
+            ? _ledger->withdraw_with_overdraft(*accounts->checking, *accounts->savings,
+                                               amount_cents, nonce, idempotency_key)
+            : _ledger->withdraw_from_account(*accounts->savings, amount_cents, nonce,
+                                             idempotency_key);
     if (!posted)
     {
         rollback_session_nonce(prev_session_nonce);
@@ -448,9 +433,9 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
     }
 
     const std::vector<const Account*> updated_accounts =
-        is_checking
-            ? std::vector<const Account*>{accounts->checking.get(), accounts->savings.get()}
-            : std::vector<const Account*>{accounts->savings.get()};
+        is_checking ? std::vector<const Account*>{accounts->checking.get(),
+                                                  accounts->savings.get()}
+                    : std::vector<const Account*>{accounts->savings.get()};
 
     if (auto committed =
             commit_operation(std::move(next_vault), updated_accounts, nonce, audit_mark);
@@ -505,11 +490,11 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
     const std::size_t audit_mark = _audit_log->size();
 
     const auto posted =
-        is_checking ? _ledger->deposit_with_overflow(
-                          *accounts->checking, *accounts->savings, total_deposited, nonce,
-                          idempotency_key)
-                    : _ledger->deposit_to_account(*accounts->savings, total_deposited, nonce,
-                                                  idempotency_key);
+        is_checking
+            ? _ledger->deposit_with_overflow(*accounts->checking, *accounts->savings,
+                                             total_deposited, nonce, idempotency_key)
+            : _ledger->deposit_to_account(*accounts->savings, total_deposited, nonce,
+                                          idempotency_key);
     if (!posted)
     {
         rollback_session_nonce(prev_session_nonce);
@@ -517,9 +502,9 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
     }
 
     const std::vector<const Account*> updated_accounts =
-        is_checking
-            ? std::vector<const Account*>{accounts->checking.get(), accounts->savings.get()}
-            : std::vector<const Account*>{accounts->savings.get()};
+        is_checking ? std::vector<const Account*>{accounts->checking.get(),
+                                                  accounts->savings.get()}
+                    : std::vector<const Account*>{accounts->savings.get()};
 
     if (auto committed =
             commit_operation(std::move(next_vault), updated_accounts, nonce, audit_mark);
@@ -533,14 +518,13 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
         is_checking
             ? std::max<std::int64_t>(0, accounts->savings->get_balance() - savings_before)
             : 0;
-    return DepositResult{total_deposited, overflow_swept, make_account_snapshot(*accounts),
-                         target->get_balance()};
+    return DepositResult{total_deposited, overflow_swept,
+                         make_account_snapshot(*accounts), target->get_balance()};
 }
 
 std::expected<TransferResult, AtmError> AtmController::process_transfer(
-    std::string_view from_account, std::string_view to_account,
-    std::int64_t amount_cents, std::string_view idempotency_key,
-    std::optional<std::uint64_t> incoming_nonce)
+    std::string_view from_account, std::string_view to_account, std::int64_t amount_cents,
+    std::string_view idempotency_key, std::optional<std::uint64_t> incoming_nonce)
 {
     std::unique_lock lock(_mtx);
 
@@ -558,8 +542,7 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
     if (!from) return std::unexpected(AtmError::Unauthorized);
 
     std::unique_ptr<Account> external_to;
-    auto target_res =
-        resolve_target_account(*_db, *accounts, to_account, external_to);
+    auto target_res = resolve_target_account(*_db, *accounts, to_account, external_to);
     if (!target_res) return std::unexpected(target_res.error());
     Account* to = *target_res;
 
@@ -575,10 +558,7 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
 
     std::unique_ptr<SavingsAccount> external_to_savings;
     SavingsAccount* to_linked_savings = nullptr;
-    if (to == accounts->checking.get())
-    {
-        to_linked_savings = accounts->savings.get();
-    }
+    if (to == accounts->checking.get()) { to_linked_savings = accounts->savings.get(); }
     else if (const auto* chk_to = dynamic_cast<const CheckingAccount*>(to);
              chk_to && chk_to->get_linked_savings_id())
     {
@@ -596,9 +576,9 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
     const std::uint64_t nonce = ++_tx_nonce;
     const std::size_t audit_mark = _audit_log->size();
 
-    const auto outcome = _ledger->transfer_with_protection(
-        *from, *to, amount_cents, from_linked_savings, to_linked_savings, nonce,
-        idempotency_key);
+    const auto outcome =
+        _ledger->transfer_with_protection(*from, *to, amount_cents, from_linked_savings,
+                                          to_linked_savings, nonce, idempotency_key);
     if (!outcome)
     {
         rollback_session_nonce(prev_session_nonce);
@@ -608,9 +588,8 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
     std::vector<const Account*> updated_accounts{from, to};
     auto add_unique_account = [&updated_accounts](const Account* acc)
     {
-        if (acc &&
-            std::find(updated_accounts.begin(), updated_accounts.end(), acc) ==
-                updated_accounts.end())
+        if (acc && std::find(updated_accounts.begin(), updated_accounts.end(), acc) ==
+                       updated_accounts.end())
         {
             updated_accounts.push_back(acc);
         }
@@ -618,7 +597,8 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
     if (outcome->overdraft_covered_cents > 0) add_unique_account(from_linked_savings);
     if (outcome->overflow_swept_cents > 0) add_unique_account(to_linked_savings);
 
-    if (auto committed = commit_operation(std::nullopt, updated_accounts, nonce, audit_mark);
+    if (auto committed =
+            commit_operation(std::nullopt, updated_accounts, nonce, audit_mark);
         !committed)
     {
         rollback_session_nonce(prev_session_nonce);
@@ -680,15 +660,9 @@ std::expected<void, AtmError> AtmController::process_replace_cassette(
 
     CashVault next_vault{*_vault};
     const auto delta = next_vault.replace_cassette(denomination, new_count);
-    if (!delta)
-    {
-        return std::unexpected(to_atm_error(delta.error()));
-    }
+    if (!delta) { return std::unexpected(to_atm_error(delta.error())); }
 
-    if (*delta == 0)
-    {
-        return {};
-    }
+    if (*delta == 0) { return {}; }
 
     if (auto replayed = consume_session_nonce(); !replayed) return replayed;
 
@@ -720,6 +694,118 @@ std::expected<void, AtmError> AtmController::process_replace_cassette(
     }
 
     return commit_operation(std::move(next_vault), {}, nonce, audit_mark);
+}
+
+std::expected<std::vector<storage::CardAdminRecord>, AtmError> AtmController::
+    admin_list_cards()
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session)
+        return std::unexpected(session.error());
+    if (!_db) return std::unexpected(AtmError::InternalError);
+
+    auto cards = _db->list_cards();
+    if (!cards) return std::unexpected(to_atm_error(cards.error()));
+    return std::move(*cards);
+}
+
+std::expected<void, AtmError> AtmController::admin_issue_card(
+    std::string_view card_number, std::string_view holder, std::string_view pin,
+    UserRole role, std::optional<std::string> checking_account_id,
+    std::optional<int> window_start, std::optional<int> window_end)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+    if (!_db || !_auth_service) return std::unexpected(AtmError::InternalError);
+    if (card_number.empty() || holder.empty())
+        return std::unexpected(AtmError::CardNotFound);
+    if (pin.size() != 4) return std::unexpected(AtmError::InvalidPin);
+    if (window_start.has_value() != window_end.has_value())
+        return std::unexpected(AtmError::InvalidAmount);
+    if (window_start && (*window_start < 0 || *window_start > 23))
+        return std::unexpected(AtmError::InvalidAmount);
+    if (window_end && (*window_end < 0 || *window_end > 23))
+        return std::unexpected(AtmError::InvalidAmount);
+    if (role == UserRole::None) return std::unexpected(AtmError::Unauthorized);
+
+    const auto salt_bytes = crypto::random_bytes(16);
+    std::string salt = crypto::sha256_hex(std::string_view{
+        reinterpret_cast<const char*>(salt_bytes.data()), salt_bytes.size()});
+    std::string pin_hash = crypto::sha256_hex(pin, salt);
+
+    CardRecord record{std::string(card_number),
+                      std::string(holder),
+                      pin_hash,
+                      salt,
+                      std::move(checking_account_id),
+                      role,
+                      false,
+                      false,
+                      0};
+    record.access_window_start = window_start;
+    record.access_window_end = window_end;
+
+    const auto issued = _db->issue_card(record, salt);
+    crypto::secure_zero(pin_hash);
+    crypto::secure_zero(salt);
+    record.pin_hash.clear();
+    record.salt.clear();
+    if (!issued) return std::unexpected(to_atm_error(issued.error()));
+
+    return _append_security_event("CARD_ISSUED", card_number);
+}
+
+std::expected<void, AtmError> AtmController::admin_revoke_card(
+    std::string_view card_number)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+    if (!_db) return std::unexpected(AtmError::InternalError);
+    if (card_number.empty()) return std::unexpected(AtmError::CardNotFound);
+
+    const auto revoked = _db->revoke_card(card_number);
+    if (!revoked) return std::unexpected(to_atm_error(revoked.error()));
+
+    return _append_security_event("CARD_REVOKED", card_number);
+}
+
+std::expected<void, AtmError> AtmController::admin_set_card_role(
+    std::string_view card_number, UserRole role)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+    if (!_db) return std::unexpected(AtmError::InternalError);
+    if (role == UserRole::None) return std::unexpected(AtmError::Unauthorized);
+
+    const auto updated = _db->set_card_role(card_number, role);
+    if (!updated) return std::unexpected(to_atm_error(updated.error()));
+
+    return _append_security_event("CARD_RIGHTS_UPDATED", card_number);
+}
+
+std::expected<void, AtmError> AtmController::admin_set_card_window(
+    std::string_view card_number, std::optional<int> window_start,
+    std::optional<int> window_end)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session) return session;
+    if (!_db) return std::unexpected(AtmError::InternalError);
+    if (window_start.has_value() != window_end.has_value())
+        return std::unexpected(AtmError::InvalidAmount);
+    if (window_start && (*window_start < 0 || *window_start > 23))
+        return std::unexpected(AtmError::InvalidAmount);
+    if (window_end && (*window_end < 0 || *window_end > 23))
+        return std::unexpected(AtmError::InvalidAmount);
+
+    const auto updated = _db->set_card_window(card_number, window_start, window_end);
+    if (!updated) return std::unexpected(to_atm_error(updated.error()));
+
+    return _append_security_event("CARD_WINDOW_UPDATED", card_number);
 }
 
 std::expected<void, AtmError> AtmController::process_unlock_card(
@@ -776,8 +862,8 @@ std::expected<std::vector<ApsRule>, AtmError> AtmController::get_customer_aps_ru
 }
 
 std::expected<ApsRule, AtmError> AtmController::create_customer_aps_rule(
-    std::string_view from_account, std::string_view to_account,
-    std::int64_t amount_cents, bool fixed_amount, std::int64_t period_seconds)
+    std::string_view from_account, std::string_view to_account, std::int64_t amount_cents,
+    bool fixed_amount, std::int64_t period_seconds)
 {
     std::unique_lock lock(_mtx);
 
@@ -878,7 +964,7 @@ std::expected<void, AtmError> AtmController::delete_customer_aps_rule(
 }
 
 std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entries(
-    std::size_t offset, std::size_t limit)
+    std::size_t offset, std::size_t limit, const AuditFilter& filter)
 {
     std::unique_lock lock(_mtx);
 
@@ -886,11 +972,37 @@ std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entri
         return std::unexpected(session.error());
     if (!_audit_log) return std::unexpected(AtmError::InternalError);
 
-    if (offset == 0 && limit == 0)
+    if (!filter.empty())
     {
-        return _audit_log->entries();
+        return _audit_log->entries_page_filtered(offset, limit, filter);
     }
+    if (offset == 0 && limit == 0) { return _audit_log->entries(); }
     return _audit_log->entries_page(offset, limit);
+}
+
+std::expected<std::string, AtmError> AtmController::export_audit_csv(
+    const AuditFilter& filter)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Engineer); !session)
+        return std::unexpected(session.error());
+    if (!_audit_log) return std::unexpected(AtmError::InternalError);
+
+    std::string csv =
+        "id,timestamp,event,debit_account,credit_account,amount_cents,hash\n";
+    std::size_t id = 0;
+    _audit_log->for_each_entry(
+        [&](const LedgerEntry& entry)
+        {
+            if (!AuditLog::matches_filter(entry, filter)) { return; }
+            ++id;
+            csv += std::to_string(id) + "," + entry.timestamp + "," +
+                   entry.operation_type + "," + entry.debit_account_id + "," +
+                   entry.credit_account_id + "," + std::to_string(entry.amount_cents) +
+                   "," + entry.curr_hash + "\n";
+        });
+    return csv;
 }
 
 std::expected<ChainVerification, AtmError> AtmController::verify_audit_integrity()
@@ -903,17 +1015,12 @@ std::expected<ChainVerification, AtmError> AtmController::verify_audit_integrity
 
     auto result = _audit_log->verify_integrity_chain();
     if (!result) return std::unexpected(AtmError::CryptoVerificationFailed);
-    if (!result->ok && _ledger)
-    {
-        _ledger->set_integrity_compromised(true);
-    }
+    if (!result->ok && _ledger) { _ledger->set_integrity_compromised(true); }
     return *result;
 }
 
 bool AtmController::is_audit_entry_tampered(const LedgerEntry& entry) const
-{
-    return _audit_log ? _audit_log->is_entry_tampered(entry) : false;
-}
+{ return _audit_log ? _audit_log->is_entry_tampered(entry) : false; }
 
 std::expected<void, AtmError> AtmController::simulate_audit_tamper(bool restore)
 {
@@ -940,14 +1047,14 @@ std::expected<void, AtmError> AtmController::simulate_audit_tamper(bool restore)
     return {};
 }
 
-std::expected<void, AtmError> AtmController::open_vault_door()
+std::expected<void, AtmError> AtmController::open_vault_door(bool forced)
 {
     std::unique_lock lock(_mtx);
 
     if (auto session = require_role(UserRole::Engineer); !session) return session;
 
     _vault->open_door();
-    return _append_security_event("VAULT_DOOR_OPENED");
+    return _append_security_event(forced ? "VAULT_DOOR_FORCED" : "VAULT_DOOR_OPENED");
 }
 
 std::expected<void, AtmError> AtmController::close_vault_door()
@@ -982,8 +1089,9 @@ std::expected<void, AtmError> AtmController::_append_security_event(
 bool AtmController::verify_engineer_key(std::string_view engineer_key) const noexcept
 {
     const char* env_key = std::getenv("ATM_ENGINEER_MASTER_KEY");
-    const std::string_view expected =
-        (env_key != nullptr && *env_key != '\0') ? std::string_view{env_key} : kDefaultEngineerKey;
+    const std::string_view expected = (env_key != nullptr && *env_key != '\0')
+                                          ? std::string_view{env_key}
+                                          : kDefaultEngineerKey;
     return crypto::constant_time_compare(engineer_key, expected);
 }
 
@@ -1063,7 +1171,8 @@ std::expected<void, AtmError> AtmController::commit_operation(
     std::optional<CashVault> next_vault, const std::vector<const Account*>& accounts,
     std::uint64_t nonce, std::size_t audit_mark)
 {
-    const auto inventory = next_vault ? std::optional{inventory_of(*next_vault)} : std::nullopt;
+    const auto inventory =
+        next_vault ? std::optional{inventory_of(*next_vault)} : std::nullopt;
 
     const auto saved = _db->execute_transaction(
         [&](sqlite3* raw)
@@ -1072,7 +1181,8 @@ std::expected<void, AtmError> AtmController::commit_operation(
             {
                 if (!storage::save_account(raw, *acc)) return false;
             }
-            if (inventory && !storage::save_vault_inventory(raw, *inventory)) return false;
+            if (inventory && !storage::save_vault_inventory(raw, *inventory))
+                return false;
             return true;
         });
 
@@ -1083,9 +1193,6 @@ std::expected<void, AtmError> AtmController::commit_operation(
         return std::unexpected(AtmError::DatabaseError);
     }
 
-    if (next_vault)
-    {
-        *_vault = std::move(*next_vault);
-    }
+    if (next_vault) { *_vault = std::move(*next_vault); }
     return {};
 }

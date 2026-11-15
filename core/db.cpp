@@ -23,7 +23,9 @@
 
 #include <sqlite3.h>
 
+#include <array>
 #include <format>
+#include <optional>
 #include <stdexcept>
 
 void DatabaseManager::SqliteDeleter::operator()(sqlite3* db) const noexcept
@@ -53,6 +55,14 @@ DatabaseManager::DatabaseManager(std::string_view path) : _db_path{path}
     {
         throw std::runtime_error(std::format("cannot initialise database '{}': {}",
                                              _db_path, sqlite3_errmsg(_db_handle.get())));
+    }
+
+    for (const char* migration :
+         std::array{"ALTER TABLE cards ADD COLUMN revoked INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE cards ADD COLUMN access_window_start INTEGER",
+                    "ALTER TABLE cards ADD COLUMN access_window_end INTEGER"})
+    {
+        (void) storage::exec(_db_handle.get(), migration);
     }
 }
 
@@ -91,14 +101,53 @@ std::expected<std::map<Denomination, int>, DbError> DatabaseManager::
     return storage::load_vault_inventory(_db_handle.get());
 }
 
-std::expected<CardRecord, DbError> DatabaseManager::load_card(std::string_view card, bool validate_only) {
+std::expected<CardRecord, DbError> DatabaseManager::load_card(std::string_view card,
+                                                              bool validate_only)
+{
     std::scoped_lock lock{_db_mutex};
-    return validate_only ? storage::load_card_limited(_db_handle.get(), card) : storage::load_card(_db_handle.get(), card);
+    return validate_only ? storage::load_card_limited(_db_handle.get(), card)
+                         : storage::load_card(_db_handle.get(), card);
 }
 
-std::expected<void, DbError> DatabaseManager::block_card(std::string_view card) {
+std::expected<void, DbError> DatabaseManager::block_card(std::string_view card)
+{
     std::scoped_lock lock{_db_mutex};
     return storage::block_card(_db_handle.get(), card);
+}
+
+std::expected<void, DbError> DatabaseManager::revoke_card(std::string_view card)
+{
+    std::lock_guard lock(_db_mutex);
+    return storage::revoke_card(_db_handle.get(), card);
+}
+
+std::expected<void, DbError> DatabaseManager::issue_card(const CardRecord& card,
+                                                         const std::string& salt)
+{
+    std::lock_guard lock(_db_mutex);
+    return storage::insert_card_admin(_db_handle.get(), card, salt);
+}
+
+std::expected<void, DbError> DatabaseManager::set_card_role(std::string_view card,
+                                                            UserRole role)
+{
+    std::lock_guard lock(_db_mutex);
+    return storage::set_card_role(_db_handle.get(), card, role);
+}
+
+std::expected<void, DbError> DatabaseManager::set_card_window(std::string_view card,
+                                                              std::optional<int> start,
+                                                              std::optional<int> end)
+{
+    std::lock_guard lock(_db_mutex);
+    return storage::set_card_window(_db_handle.get(), card, start, end);
+}
+
+std::expected<std::vector<storage::CardAdminRecord>, DbError> DatabaseManager::
+    list_cards()
+{
+    std::lock_guard lock(_db_mutex);
+    return storage::list_cards(_db_handle.get());
 }
 
 std::expected<void, DbError> DatabaseManager::unlock_card(std::string_view card)
@@ -107,12 +156,15 @@ std::expected<void, DbError> DatabaseManager::unlock_card(std::string_view card)
     return storage::unlock_card(_db_handle.get(), card);
 }
 
-std::expected<int, DbError> DatabaseManager::get_failed_attempts(std::string_view card) {
+std::expected<int, DbError> DatabaseManager::get_failed_attempts(std::string_view card)
+{
     std::scoped_lock lock{_db_mutex};
     return storage::get_failed_attempts(_db_handle.get(), card);
 }
 
-std::expected<void, DbError> DatabaseManager::set_failed_attempts(std::string_view card, int amount) {
+std::expected<void, DbError> DatabaseManager::set_failed_attempts(std::string_view card,
+                                                                  int amount)
+{
     std::scoped_lock lock{_db_mutex};
     return storage::set_failed_attempts(_db_handle.get(), card, amount);
 }

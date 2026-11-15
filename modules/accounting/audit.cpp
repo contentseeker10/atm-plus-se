@@ -30,10 +30,7 @@ AuditLog::AuditLog(std::shared_ptr<DatabaseManager> db, std::string hmac_secret_
       _chain_head{std::make_shared<const std::string>(64, '0')}
 { }
 
-AuditLog::~AuditLog() noexcept
-{
-    crypto::secure_zero(_hmac_secret_key);
-}
+AuditLog::~AuditLog() noexcept { crypto::secure_zero(_hmac_secret_key); }
 
 std::expected<void, CryptoError> AuditLog::load_from_database()
 {
@@ -236,8 +233,10 @@ std::expected<ChainVerification, CryptoError> AuditLog::verify_integrity_chain()
             {
                 const auto db_it = db_by_tx_id.find(e.tx_id);
                 if (db_it == db_by_tx_id.end() ||
-                    !crypto::constant_time_compare(db_it->second.prev_hash, e.prev_hash) ||
-                    !crypto::constant_time_compare(db_it->second.curr_hash, e.curr_hash) ||
+                    !crypto::constant_time_compare(db_it->second.prev_hash,
+                                                   e.prev_hash) ||
+                    !crypto::constant_time_compare(db_it->second.curr_hash,
+                                                   e.curr_hash) ||
                     !crypto::constant_time_compare(db_it->second.hmac_signature,
                                                    e.hmac_signature) ||
                     db_it->second.to_payload_string() != e.to_payload_string() ||
@@ -245,8 +244,8 @@ std::expected<ChainVerification, CryptoError> AuditLog::verify_integrity_chain()
                 {
                     result.ok = false;
                     result.first_broken_index = i;
-                    result.detail = std::format(
-                        "database record {} mismatch or tampered", i);
+                    result.detail =
+                        std::format("database record {} mismatch or tampered", i);
                     return result;
                 }
             }
@@ -289,28 +288,64 @@ std::vector<LedgerEntry> AuditLog::entries_from(std::size_t start_index) const
 {
     std::lock_guard lock(_mtx);
     if (start_index >= _entries.size()) { return {}; }
-    return std::vector<LedgerEntry>(_entries.cbegin() + static_cast<std::ptrdiff_t>(start_index),
-                                    _entries.cend());
+    return std::vector<LedgerEntry>(
+        _entries.cbegin() + static_cast<std::ptrdiff_t>(start_index), _entries.cend());
 }
 
-std::vector<LedgerEntry> AuditLog::entries_page(std::size_t offset, std::size_t limit) const
+std::vector<LedgerEntry> AuditLog::entries_page(std::size_t offset,
+                                                std::size_t limit) const
 {
     std::lock_guard lock(_mtx);
     if (offset >= _entries.size()) { return {}; }
     const std::size_t available = _entries.size() - offset;
     const std::size_t count = (limit == 0 || limit > available) ? available : limit;
     const auto begin_it = _entries.cbegin() + static_cast<std::ptrdiff_t>(offset);
-    return std::vector<LedgerEntry>(begin_it, begin_it + static_cast<std::ptrdiff_t>(count));
+    return std::vector<LedgerEntry>(begin_it,
+                                    begin_it + static_cast<std::ptrdiff_t>(count));
+}
+
+bool AuditLog::matches_filter(const LedgerEntry& entry, const AuditFilter& filter)
+{
+    if (filter.since.has_value() && entry.timestamp < *filter.since) { return false; }
+    if (filter.until.has_value() && entry.timestamp > *filter.until) { return false; }
+    if (filter.card.has_value() && entry.debit_account_id != *filter.card &&
+        entry.credit_account_id != *filter.card)
+    {
+        return false;
+    }
+    if (filter.event.has_value() && entry.operation_type != *filter.event)
+    {
+        return false;
+    }
+    return true;
+}
+
+std::vector<LedgerEntry> AuditLog::entries_page_filtered(std::size_t offset,
+                                                         std::size_t limit,
+                                                         const AuditFilter& filter) const
+{
+    if (filter.empty()) { return entries_page(offset, limit); }
+
+    std::vector<LedgerEntry> page;
+    std::size_t seen = 0;
+    for_each_entry(
+        [&](const LedgerEntry& entry)
+        {
+            if (!matches_filter(entry, filter)) { return; }
+            if (seen >= offset && (limit == 0 || page.size() < limit))
+            {
+                page.push_back(entry);
+            }
+            ++seen;
+        });
+    return page;
 }
 
 void AuditLog::for_each_entry(const std::function<void(const LedgerEntry&)>& fn) const
 {
     if (!fn) { return; }
     std::lock_guard lock(_mtx);
-    for (const auto& entry : _entries)
-    {
-        fn(entry);
-    }
+    for (const auto& entry : _entries) { fn(entry); }
 }
 
 std::shared_ptr<const std::string> AuditLog::get_last_hash() const noexcept
@@ -367,7 +402,8 @@ void AuditLog::restore_tampered_entries()
                         raw,
                         "UPDATE ledger_entries SET amount_cents = ?1 WHERE tx_id = ?2");
                     if (!stmt) { return false; }
-                    if (sqlite3_bind_int64(stmt->get(), 1, original_amount) != SQLITE_OK ||
+                    if (sqlite3_bind_int64(stmt->get(), 1, original_amount) !=
+                            SQLITE_OK ||
                         storage::bind_text(stmt->get(), 2, tx_id) != SQLITE_OK)
                     {
                         return false;

@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS cards (
     is_blocked          INTEGER NOT NULL DEFAULT 0 CHECK (is_blocked IN (0, 1)),
     is_expired          INTEGER NOT NULL DEFAULT 0 CHECK (is_expired IN (0, 1)),
     failed_attempts     INTEGER NOT NULL DEFAULT 0,
-    checking_account_id TEXT REFERENCES accounts(account_id)
+    checking_account_id TEXT REFERENCES accounts(account_id),
+    revoked             INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
+    access_window_start INTEGER CHECK (access_window_start IS NULL OR access_window_start BETWEEN 0 AND 23),
+    access_window_end   INTEGER CHECK (access_window_end IS NULL OR access_window_end BETWEEN 0 AND 23)
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS ledger_entries (
@@ -104,16 +107,42 @@ WHERE c.card_number = ?1
 )sql";
 
     inline constexpr std::string_view kSelectLimitedCardRecord = R"sql(
-SELECT card_number, is_blocked, is_expired
+SELECT card_number, is_blocked, is_expired, revoked,
+       access_window_start, access_window_end
 FROM cards
 WHERE card_number = ?1
 )sql";
 
     inline constexpr std::string_view kSelectCardRecord = R"sql(
 SELECT card_number, card_holder, pin_hash, salt, checking_account_id,
-       role, is_blocked, is_expired, failed_attempts
+       role, is_blocked, is_expired, failed_attempts,
+       revoked, access_window_start, access_window_end
 FROM cards
 WHERE card_number = ?1
+)sql";
+
+    inline constexpr std::string_view kInsertCardAdmin = R"sql(
+INSERT INTO cards (card_number, card_holder, pin_hash, salt, role,
+                   is_blocked, is_expired, failed_attempts, checking_account_id,
+                   revoked, access_window_start, access_window_end)
+VALUES (?1, ?2, ?3, ?4, ?5, 0, 0, 0, ?6, 0, ?7, ?8)
+)sql";
+
+    inline constexpr std::string_view kRevokeCard =
+        "UPDATE cards SET revoked = 1 WHERE card_number = ?1";
+
+    inline constexpr std::string_view kSetCardRole =
+        "UPDATE cards SET role = ?1 WHERE card_number = ?2";
+
+    inline constexpr std::string_view kSetCardWindow =
+        "UPDATE cards SET access_window_start = ?1, access_window_end = ?2 "
+        "WHERE card_number = ?3";
+
+    inline constexpr std::string_view kListCards = R"sql(
+SELECT card_number, card_holder, role, is_blocked, is_expired, revoked,
+       failed_attempts, access_window_start, access_window_end, checking_account_id
+FROM cards
+ORDER BY card_number
 )sql";
 
     inline constexpr std::string_view kUpdateBlocked =
@@ -168,4 +197,4 @@ SELECT tx_id, debit_account, credit_account, amount_cents,
        prev_hash, curr_hash, hmac_signature
 FROM ledger_entries
 )sql";
-}
+} // namespace storage::sql
