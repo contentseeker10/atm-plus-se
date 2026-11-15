@@ -14,80 +14,17 @@
 
 #include "crypto.hpp"
 
-#include "storage/sqlite_utils.hpp"
-
-#include <sqlite3.h>
+#include "storage/operations.hpp"
 
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
 
-namespace
-{
-    constexpr char kLedgerEntriesSchema[] = R"sql(
-CREATE TABLE IF NOT EXISTS ledger_entries (
-    tx_id           TEXT    NOT NULL PRIMARY KEY,
-    debit_account   TEXT    NOT NULL CHECK (length(debit_account) > 0),
-    credit_account  TEXT    NOT NULL CHECK (length(credit_account) > 0),
-    amount_cents    INTEGER NOT NULL CHECK (amount_cents > 0),
-    timestamp       TEXT    NOT NULL,
-    operation_type  TEXT    NOT NULL,
-    tx_nonce        INTEGER NOT NULL CHECK (tx_nonce >= 0),
-    prev_hash       TEXT    NOT NULL,
-    curr_hash       TEXT    NOT NULL,
-    hmac_signature  TEXT    NOT NULL,
-    CHECK (debit_account <> credit_account)
-) STRICT;
-)sql";
-
-    constexpr std::string_view kInsertLedgerEntry = R"sql(
-INSERT INTO ledger_entries
-    (tx_id, debit_account, credit_account, amount_cents,
-     timestamp, operation_type, tx_nonce, prev_hash, curr_hash, hmac_signature)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-)sql";
-
-    std::expected<void, CryptoError> insert_entry(sqlite3* db, const LedgerEntry& e)
-    {
-        auto stmt = storage::prepare(db, kInsertLedgerEntry);
-        if (!stmt) { return std::unexpected(CryptoError::DatabaseError); }
-
-        sqlite3_stmt* s = stmt->get();
-        storage::bind_text(s, 1, e.tx_id);
-        storage::bind_text(s, 2, e.debit_account_id);
-        storage::bind_text(s, 3, e.credit_account_id);
-        sqlite3_bind_int64(s, 4, e.amount_cents);
-        storage::bind_text(s, 5, e.timestamp);
-        storage::bind_text(s, 6, e.operation_type);
-        sqlite3_bind_int64(s, 7, static_cast<std::int64_t>(e.nonce));
-        storage::bind_text(s, 8, e.prev_hash);
-        storage::bind_text(s, 9, e.curr_hash);
-        storage::bind_text(s, 10, e.hmac_signature);
-
-        if (sqlite3_step(s) != SQLITE_DONE)
-        {
-            return std::unexpected(CryptoError::DatabaseError);
-        }
-        return {};
-    }
-} // namespace
-
 AuditLog::AuditLog(std::shared_ptr<DatabaseManager> db, std::string hmac_secret_key)
     : _db{std::move(db)}, _hmac_secret_key{std::move(hmac_secret_key)},
       _chain_head{std::make_shared<const std::string>(64, '0')}
-{
-    if (_db)
-    {
-        const auto r = _db->execute_transaction(
-            [](sqlite3* raw)
-            { return storage::exec(raw, kLedgerEntriesSchema).has_value(); });
-        if (!r)
-        {
-            throw std::runtime_error("AuditLog: cannot create ledger_entries table");
-        }
-    }
-}
+{ }
 
 std::expected<void, CryptoError> AuditLog::load_from_database()
 {
@@ -105,33 +42,9 @@ std::expected<void, CryptoError> AuditLog::load_from_database()
     const auto q = _db->execute_transaction(
         [&loaded](sqlite3* raw)
         {
-            constexpr std::string_view kSelectEntries = R"sql(
-SELECT tx_id, debit_account, credit_account, amount_cents,
-       timestamp, operation_type, tx_nonce,
-       prev_hash, curr_hash, hmac_signature
-FROM ledger_entries)sql";
-            auto stmt = storage::prepare(raw, kSelectEntries);
-            if (!stmt) { return false; }
-            sqlite3_stmt* s = stmt->get();
-            for (;;)
-            {
-                const int rc = sqlite3_step(s);
-                if (rc == SQLITE_DONE) { break; }
-                if (rc != SQLITE_ROW) { return false; }
-
-                LedgerEntry e;
-                e.tx_id = storage::column_text(s, 0);
-                e.debit_account_id = storage::column_text(s, 1);
-                e.credit_account_id = storage::column_text(s, 2);
-                e.amount_cents = sqlite3_column_int64(s, 3);
-                e.timestamp = storage::column_text(s, 4);
-                e.operation_type = storage::column_text(s, 5);
-                e.nonce = static_cast<std::uint64_t>(sqlite3_column_int64(s, 6));
-                e.prev_hash = storage::column_text(s, 7);
-                e.curr_hash = storage::column_text(s, 8);
-                e.hmac_signature = storage::column_text(s, 9);
-                loaded.push_back(std::move(e));
-            }
+            auto rows = storage::load_ledger_entries(raw);
+            if (!rows) { return false; }
+            loaded = std::move(*rows);
             return true;
         });
     if (!q) { return std::unexpected(CryptoError::DatabaseError); }
@@ -235,7 +148,7 @@ std::expected<void, CryptoError> AuditLog::append_batch(std::vector<LedgerEntry>
                 {
                     for (const auto& e : entries)
                     {
-                        if (!insert_entry(raw, e)) { return false; }
+                        if (!storage::insert_ledger_entry(raw, e)) { return false; }
                     }
                     return true;
                 });
@@ -298,6 +211,14 @@ std::vector<LedgerEntry> AuditLog::entries() const
 {
     std::lock_guard lock(_mtx);
     return _entries;
+}
+
+std::vector<LedgerEntry> AuditLog::entries_from(std::size_t start_index) const
+{
+    std::lock_guard lock(_mtx);
+    if (start_index >= _entries.size()) { return {}; }
+    return std::vector<LedgerEntry>(_entries.cbegin() + static_cast<std::ptrdiff_t>(start_index),
+                                    _entries.cend());
 }
 
 std::shared_ptr<const std::string> AuditLog::get_last_hash() const noexcept

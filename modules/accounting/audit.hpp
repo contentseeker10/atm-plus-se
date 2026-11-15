@@ -51,15 +51,15 @@ public:
     std::expected<ChainVerification, CryptoError> verify_integrity_chain() const;
 
     std::vector<LedgerEntry> entries() const;
+    std::vector<LedgerEntry> entries_from(std::size_t start_index) const;
 
     std::shared_ptr<const std::string> get_last_hash() const noexcept;
     std::size_t size() const;
 
-    // Simulate an attacker editing a SQLite row, TEST ONLY.
     void debug_tamper_amount(std::size_t index, std::int64_t new_amount);
 
 private:
-    std::shared_ptr<DatabaseManager> _db; // Optional, null = memory-only log
+    std::shared_ptr<DatabaseManager> _db;
 
     std::string _hmac_secret_key;
 

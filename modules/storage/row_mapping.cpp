@@ -16,6 +16,8 @@
 
 #include "access_control/card.hpp"
 
+#include "accounting/ledger.hpp"
+
 #include "accounts/checking_account.hpp"
 #include "accounts/savings_account.hpp"
 
@@ -101,4 +103,20 @@ namespace storage
         CardRecord record(card_number, blocked, expired);
         return record;
     }
-} // namespace storage
+
+    LedgerEntry read_ledger_entry(sqlite3_stmt* row)
+    {
+        LedgerEntry entry;
+        entry.tx_id = column_text(row, 0);
+        entry.debit_account_id = column_text(row, 1);
+        entry.credit_account_id = column_text(row, 2);
+        entry.amount_cents = sqlite3_column_int64(row, 3);
+        entry.timestamp = column_text(row, 4);
+        entry.operation_type = column_text(row, 5);
+        entry.nonce = static_cast<std::uint64_t>(sqlite3_column_int64(row, 6));
+        entry.prev_hash = column_text(row, 7);
+        entry.curr_hash = column_text(row, 8);
+        entry.hmac_signature = column_text(row, 9);
+        return entry;
+    }
+}

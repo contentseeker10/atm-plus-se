@@ -59,6 +59,20 @@ CREATE TABLE IF NOT EXISTS cards (
     checking_account_id TEXT REFERENCES accounts(account_id)
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS ledger_entries (
+    tx_id           TEXT    NOT NULL PRIMARY KEY,
+    debit_account   TEXT    NOT NULL CHECK (length(debit_account) > 0),
+    credit_account  TEXT    NOT NULL CHECK (length(credit_account) > 0),
+    amount_cents    INTEGER NOT NULL CHECK (amount_cents > 0),
+    timestamp       TEXT    NOT NULL,
+    operation_type  TEXT    NOT NULL,
+    tx_nonce        INTEGER NOT NULL CHECK (tx_nonce >= 0),
+    prev_hash       TEXT    NOT NULL,
+    curr_hash       TEXT    NOT NULL,
+    hmac_signature  TEXT    NOT NULL,
+    CHECK (debit_account <> credit_account)
+) STRICT;
+
 COMMIT;
 )sql";
 
@@ -137,4 +151,18 @@ INSERT INTO vault_cassettes (denomination_cents, bill_count, capacity)
 VALUES (?1, ?2, ?3)
 ON CONFLICT DO NOTHING
 )sql";
-} // namespace storage::sql
+
+    inline constexpr std::string_view kInsertLedgerEntry = R"sql(
+INSERT INTO ledger_entries
+    (tx_id, debit_account, credit_account, amount_cents,
+     timestamp, operation_type, tx_nonce, prev_hash, curr_hash, hmac_signature)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+)sql";
+
+    inline constexpr std::string_view kSelectLedgerEntries = R"sql(
+SELECT tx_id, debit_account, credit_account, amount_cents,
+       timestamp, operation_type, tx_nonce,
+       prev_hash, curr_hash, hmac_signature
+FROM ledger_entries
+)sql";
+}

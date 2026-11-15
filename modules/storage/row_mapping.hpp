@@ -23,6 +23,7 @@ struct sqlite3_stmt;
 
 class Account;
 struct CardRecord;
+class LedgerEntry;
 
 namespace storage
 {
@@ -32,4 +33,5 @@ namespace storage
 
     std::expected<CardRecord, DbError> read_card(sqlite3_stmt* row);
     std::expected<CardRecord, DbError> read_card_limited(sqlite3_stmt* row);
-} // namespace storage
+    LedgerEntry read_ledger_entry(sqlite3_stmt* row);
+}
