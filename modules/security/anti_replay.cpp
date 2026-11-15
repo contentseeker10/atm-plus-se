@@ -17,7 +17,7 @@ bool AntiReplayManager::validate_and_consume(std::string_view session_id,
 {
     std::unique_lock lock(_mtx);
 
-    auto it = _session_nonces.find(std::string(session_id));
+    auto it = _session_nonces.find(session_id);
     if (it == _session_nonces.end()) { return false; }
 
     if (incoming_nonce <= it->second) { return false; }
@@ -31,16 +31,30 @@ bool AntiReplayManager::is_request_unique(std::string_view idemp_key)
     if (idemp_key.empty()) { return false; }
 
     std::unique_lock lock(_mtx);
-    const auto now = clock::now();
-    const auto [it, inserted] = _seen_idemp_keys.try_emplace(std::string(idemp_key), now);
+    if (_seen_idemp_keys.find(idemp_key) != _seen_idemp_keys.end())
+    {
+        return false;
+    }
 
-    return inserted;
+    const auto now = clock::now();
+    if (_seen_idemp_keys.size() >= kAutoPurgeThreshold)
+    {
+        _purge_expired_keys_unlocked(now, kDefaultKeyTtl);
+    }
+
+    _seen_idemp_keys.emplace(std::string(idemp_key), now);
+    return true;
 }
 
 void AntiReplayManager::purge_expired_keys(std::chrono::seconds max_age)
 {
     std::unique_lock lock(_mtx);
-    const auto now = clock::now();
+    _purge_expired_keys_unlocked(clock::now(), max_age);
+}
+
+void AntiReplayManager::_purge_expired_keys_unlocked(clock::time_point now,
+                                                     std::chrono::seconds max_age)
+{
     std::erase_if(_seen_idemp_keys, [now, max_age](const auto& pair)
                   { return (now - pair.second) > max_age; });
 }
@@ -48,12 +62,22 @@ void AntiReplayManager::purge_expired_keys(std::chrono::seconds max_age)
 void AntiReplayManager::reset_session(std::string_view session_id)
 {
     std::unique_lock lock(_mtx);
-    _session_nonces.erase(std::string(session_id));
+    if (auto it = _session_nonces.find(session_id); it != _session_nonces.end())
+    {
+        _session_nonces.erase(it);
+    }
 }
 
 void AntiReplayManager::register_session(std::string_view session_id,
                                          uint64_t initial_nonce)
 {
     std::unique_lock lock(_mtx);
-    _session_nonces[std::string(session_id)] = initial_nonce;
+    if (auto it = _session_nonces.find(session_id); it != _session_nonces.end())
+    {
+        it->second = initial_nonce;
+    }
+    else
+    {
+        _session_nonces.emplace(std::string(session_id), initial_nonce);
+    }
 }
