@@ -16,6 +16,8 @@
 
 #include "storage/operations.hpp"
 
+#include <algorithm>
+
 std::expected<CardRecord, AuthError> AuthService::validate_card(std::string_view card, bool auth) {
     auto record = _load_card(card, !auth);
     if (!record) {
@@ -101,6 +103,17 @@ std::expected<int, AuthError> AuthService::_inc_failed_attempts(std::string_view
         return std::unexpected(to_auth_error(result.error()));
     }
     return attempts;
+}
+
+int AuthService::get_remaining_attempts(std::string_view card) const {
+    if (!_db || card.empty()) {
+        return 0;
+    }
+    const auto attempts = _db->get_failed_attempts(card);
+    if (!attempts) {
+        return 0;
+    }
+    return std::max(0, kMaxFailedAttempts - *attempts);
 }
 
 std::expected<void, AuthError> AuthService::_reset_failed_attempts(std::string_view card) {

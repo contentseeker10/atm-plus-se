@@ -22,6 +22,7 @@
 #include "session_context.hpp"
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -46,12 +47,33 @@ struct CustomerAccountSnapshot
     std::int64_t savings_balance_cents{};
 };
 
+struct WithdrawResult
+{
+    std::map<Denomination, int> dispensed_bills;
+    std::int64_t overdraft_covered_cents{};
+    CustomerAccountSnapshot accounts;
+};
+
+struct DepositResult
+{
+    std::int64_t total_deposited_cents{};
+    std::int64_t overflow_swept_cents{};
+    CustomerAccountSnapshot accounts;
+};
+
+struct TransferResult
+{
+    std::int64_t source_new_balance_cents{};
+    CustomerAccountSnapshot accounts;
+};
+
 class AtmController
 {
 public:
     AtmController(std::unique_ptr<CashVault> vault, std::shared_ptr<DatabaseManager> db,
                   std::shared_ptr<AuditLog> log, std::unique_ptr<AuthService> auth,
-                  std::shared_ptr<LedgerService> ledger = nullptr);
+                  std::shared_ptr<LedgerService> ledger = nullptr,
+                  std::shared_ptr<AntiReplayManager> anti_replay = nullptr);
     ~AtmController();
 
     AtmController(const AtmController&) = delete;
@@ -61,7 +83,7 @@ public:
     AtmController& operator=(AtmController&&) = delete;
 
     void transition_to(std::unique_ptr<IAtmState> new_state);
-    void start_session(const CardRecord& card);
+    void start_session(const CardRecord& card, bool authenticated = true);
     void update_session(const CardRecord& card);
     void end_session() noexcept;
 
@@ -70,12 +92,12 @@ public:
     std::expected<void, AtmError> process_select_service(ServiceType service);
     std::expected<void, AtmError> process_eject_card();
     std::expected<void, AtmError> process_open_vault(std::string_view engineer_key);
-    std::expected<void, AtmError> process_withdraw(int64_t amount_cents);
-    std::expected<void, AtmError> process_deposit(const std::vector<Denomination>& bills);
-    std::expected<void, AtmError> process_transfer(std::string_view from_account,
-                                                   std::string_view to_account,
-                                                   std::int64_t amount_cents,
-                                                   std::string_view idempotency_key = "");
+    std::expected<WithdrawResult, AtmError> process_withdraw(int64_t amount_cents);
+    std::expected<DepositResult, AtmError>  process_deposit(const std::vector<Denomination>& bills);
+    std::expected<TransferResult, AtmError> process_transfer(std::string_view from_account,
+                                                             std::string_view to_account,
+                                                             std::int64_t amount_cents,
+                                                             std::string_view idempotency_key = "");
     std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
 
     std::expected<CustomerAccountSnapshot, AtmError> get_customer_accounts();
@@ -95,6 +117,7 @@ public:
     std::optional<std::string> get_active_session_id() const;
     std::optional<CardRecord>  get_active_card()       const;
     UserRole                   get_active_role()       const;
+    int                        get_remaining_pin_attempts(std::string_view card) const;
 
     std::string_view get_current_state_name() const
     { return _current_state->get_state_name(); }
@@ -105,8 +128,8 @@ private:
 
     std::expected<void, AtmError> require_role(UserRole role);
     std::expected<void, AtmError> consume_session_nonce();
-    std::expected<void, AtmError> commit_cash_operation(
-        CashVault next_vault, const std::vector<const Account*>& accounts,
+    std::expected<void, AtmError> commit_operation(
+        std::optional<CashVault> next_vault, const std::vector<const Account*>& accounts,
         std::uint64_t nonce, std::size_t audit_mark);
 
     std::shared_ptr<DatabaseManager>   _db;

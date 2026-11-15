@@ -8,6 +8,8 @@ temp/
 ### DB ###
 
 *.db
+*.db-wal
+*.db-shm
 
 ### C++ ###
 # Prerequisites

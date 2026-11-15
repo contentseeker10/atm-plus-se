@@ -472,17 +472,17 @@ void HttpServerAdapter::_register_routes()
             return send_atm_error(res, r.error());
         }
 
-        _remaining_attempts = 3;
         const auto card = _atm_controller->get_active_card();
         const std::string holder =
             (card && !card->holder.empty()) ? card->holder : "CARDHOLDER";
+        const int remaining = _atm_controller->get_remaining_pin_attempts(*card_number);
 
         send_json(res, 200, {
             {"status", "ok"},
             {"requiresPin", true},
             {"cardHolder", holder},
             {"maskedPan", mask_pan(*card_number)},
-            {"remainingAttempts", _remaining_attempts.load()}
+            {"remainingAttempts", remaining}
         });
     });
 
@@ -491,20 +491,22 @@ void HttpServerAdapter::_register_routes()
         const auto body = parse_json_body(req, res);
         if (!body) return;
 
+        const auto active_before = _atm_controller->get_active_card();
+        const auto expected_pan = read_string(*body, "cardNumber", "pan");
+        if (expected_pan && active_before && active_before->number != *expected_pan)
+        {
+            return send_atm_error(res, AtmError::InvalidStateTransition);
+        }
+
+        const std::string target_pan =
+            active_before ? active_before->number : expected_pan.value_or("");
+
         const auto pin = read_string(*body, "pin");
         if (!pin || pin->empty())
         {
-            return send_atm_error(res, AtmError::InvalidPin,
-                                  {{"remainingAttempts", _remaining_attempts.load()}});
-        }
-
-        const auto active_before = _atm_controller->get_active_card();
-        if (const auto expected_pan = read_string(*body, "cardNumber", "pan"))
-        {
-            if (active_before && active_before->number != *expected_pan)
-            {
-                return send_atm_error(res, AtmError::InvalidStateTransition);
-            }
+            return send_atm_error(
+                res, AtmError::InvalidPin,
+                {{"remainingAttempts", _atm_controller->get_remaining_pin_attempts(target_pan)}});
         }
 
         const auto r = _atm_controller->process_enter_pin(*pin);
@@ -513,40 +515,39 @@ void HttpServerAdapter::_register_routes()
             if (r.error() == AtmError::MaxAttemptsExceeded ||
                 r.error() == AtmError::CardBlocked)
             {
-                _remaining_attempts = 0;
                 return send_atm_error(res, r.error(),
                                       {{"remainingAttempts", 0}, {"cardBlocked", true}});
             }
             if (r.error() == AtmError::InvalidPin)
             {
-                const int next = std::max(1, _remaining_attempts.load() - 1);
-                _remaining_attempts = next;
-                return send_atm_error(res, r.error(), {{"remainingAttempts", next}});
+                return send_atm_error(
+                    res, r.error(),
+                    {{"remainingAttempts", _atm_controller->get_remaining_pin_attempts(target_pan)}});
             }
             return send_atm_error(res, r.error());
         }
 
-        _remaining_attempts = 3;
         const std::string token = _atm_controller->get_active_session_id().value_or("");
         const auto card = _atm_controller->get_active_card();
         const std::string role =
             (card && card->role == UserRole::Engineer) ? "Engineer" : "Customer";
         const std::string holder =
             (card && !card->holder.empty()) ? card->holder : "CARDHOLDER";
+        const int remaining =
+            _atm_controller->get_remaining_pin_attempts(card ? card->number : target_pan);
 
         send_json(res, 200, {
             {"status", "ok"},
             {"token", token},
             {"role", role},
             {"cardHolder", holder},
-            {"remainingAttempts", 3}
+            {"remainingAttempts", remaining}
         });
     });
 
     _server.Post("/api/card/eject", [this](const httplib::Request&, httplib::Response& res)
     {
         std::ignore = _atm_controller->process_eject_card();
-        _remaining_attempts = 3;
         send_json(res, 200, {{"status", "ok"}});
     });
 
@@ -570,49 +571,38 @@ void HttpServerAdapter::_register_routes()
         const auto amount = read_int64(*body, "amount");
         if (!amount) return send_atm_error(res, AtmError::InvalidAmount);
 
-        const auto before = _atm_controller->get_customer_accounts();
-        if (!before) return send_atm_error(res, before.error());
-
-        const auto plan = _atm_controller->get_vault().calculate_dispense(*amount);
         const auto card = _atm_controller->get_active_card();
 
-        if (const auto wd = _atm_controller->process_withdraw(*amount); !wd)
+        const auto wd = _atm_controller->process_withdraw(*amount);
+        if (!wd)
         {
             return send_atm_error(res, wd.error());
         }
         ++_dispense_cycles;
 
-        const auto after = _atm_controller->get_customer_accounts();
-        if (!after) return send_atm_error(res, after.error());
-
-        const std::int64_t overdraft_covered = std::max<std::int64_t>(
-            0, before->savings_balance_cents - after->savings_balance_cents);
-
         json dispensed_bills = json::array();
-        if (plan)
+        for (const auto& [denom, count] : wd->dispensed_bills)
         {
-            for (const auto& [denom, count] : *plan)
+            if (count > 0)
             {
-                if (count > 0)
-                {
-                    dispensed_bills.push_back({
-                        {"denomination", static_cast<std::int64_t>(denom)},
-                        {"count", count}
-                    });
-                }
+                dispensed_bills.push_back({
+                    {"denomination", static_cast<std::int64_t>(denom)},
+                    {"count", count}
+                });
             }
         }
 
         const std::string pan = card ? card->number : "";
-        const json receipt = build_receipt(pan, "WITHDRAWAL", after->checking_id, *amount,
-                                           after->checking_balance_cents, overdraft_covered, 0);
+        const json receipt = build_receipt(pan, "WITHDRAWAL", wd->accounts.checking_id, *amount,
+                                           wd->accounts.checking_balance_cents,
+                                           wd->overdraft_covered_cents, 0);
 
         send_json(res, 200, {
             {"status", "ok"},
             {"dispensedBills", dispensed_bills},
-            {"newBalance", after->checking_balance_cents},
-            {"overdraftCoveredCents", overdraft_covered},
-            {"accounts", build_accounts_json(*after)},
+            {"newBalance", wd->accounts.checking_balance_cents},
+            {"overdraftCoveredCents", wd->overdraft_covered_cents},
+            {"accounts", build_accounts_json(wd->accounts)},
             {"receipt", receipt}
         });
     });
@@ -627,39 +617,27 @@ void HttpServerAdapter::_register_routes()
         const auto bills = parse_bills_payload(*body);
         if (!bills) return send_atm_error(res, AtmError::InvalidAmount);
 
-        const auto before = _atm_controller->get_customer_accounts();
-        if (!before) return send_atm_error(res, before.error());
-
         const auto card = _atm_controller->get_active_card();
 
-        if (const auto dep = _atm_controller->process_deposit(*bills); !dep)
+        const auto dep = _atm_controller->process_deposit(*bills);
+        if (!dep)
         {
             return send_atm_error(res, dep.error());
         }
         ++_deposit_cycles;
 
-        const auto after = _atm_controller->get_customer_accounts();
-        if (!after) return send_atm_error(res, after.error());
-
-        std::int64_t total_deposited = 0;
-        for (const Denomination denom : *bills)
-        {
-            total_deposited += static_cast<std::int64_t>(denom);
-        }
-
-        const std::int64_t overflow_swept = std::max<std::int64_t>(
-            0, after->savings_balance_cents - before->savings_balance_cents);
-
         const std::string pan = card ? card->number : "";
-        const json receipt = build_receipt(pan, "DEPOSIT", after->checking_id, total_deposited,
-                                           after->checking_balance_cents, 0, overflow_swept);
+        const json receipt = build_receipt(pan, "DEPOSIT", dep->accounts.checking_id,
+                                           dep->total_deposited_cents,
+                                           dep->accounts.checking_balance_cents, 0,
+                                           dep->overflow_swept_cents);
 
         send_json(res, 200, {
             {"status", "ok"},
-            {"totalDeposited", total_deposited},
-            {"overflowSweptCents", overflow_swept},
-            {"newBalance", after->checking_balance_cents},
-            {"accounts", build_accounts_json(*after)},
+            {"totalDeposited", dep->total_deposited_cents},
+            {"overflowSweptCents", dep->overflow_swept_cents},
+            {"newBalance", dep->accounts.checking_balance_cents},
+            {"accounts", build_accounts_json(dep->accounts)},
             {"receipt", receipt}
         });
     });
@@ -683,18 +661,11 @@ void HttpServerAdapter::_register_routes()
             read_string(*body, "nonce", "idempotencyKey").value_or("");
         const auto card = _atm_controller->get_active_card();
 
-        if (const auto tr = _atm_controller->process_transfer(*from, *to, *amount, nonce); !tr)
+        const auto tr = _atm_controller->process_transfer(*from, *to, *amount, nonce);
+        if (!tr)
         {
             return send_atm_error(res, tr.error());
         }
-
-        const auto after = _atm_controller->get_customer_accounts();
-        if (!after) return send_atm_error(res, after.error());
-
-        const bool from_savings =
-            (*from == "Savings" || *from == "savings" || *from == after->savings_id);
-        const std::int64_t new_balance =
-            from_savings ? after->savings_balance_cents : after->checking_balance_cents;
 
         std::string tx_type = "TRANSFER TO " + *to;
         for (char& ch : tx_type)
@@ -703,12 +674,13 @@ void HttpServerAdapter::_register_routes()
         }
 
         const std::string pan = card ? card->number : "";
-        const json receipt = build_receipt(pan, tx_type, *from, *amount, new_balance);
+        const json receipt =
+            build_receipt(pan, tx_type, *from, *amount, tr->source_new_balance_cents);
 
         send_json(res, 200, {
             {"status", "ok"},
-            {"newBalance", new_balance},
-            {"accounts", build_accounts_json(*after)},
+            {"newBalance", tr->source_new_balance_cents},
+            {"accounts", build_accounts_json(tr->accounts)},
             {"receipt", receipt}
         });
     });

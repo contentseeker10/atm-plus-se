@@ -17,6 +17,7 @@
 #include "sqlite_utils.hpp"
 
 #include <access_control/card.hpp>
+#include "accounting/ledger.hpp"
 #include "accounts/account.hpp"
 #include "cash/cassette.hpp"
 
@@ -281,4 +282,53 @@ namespace storage
 
         return {};
     }
-} // namespace storage
+
+    std::expected<void, DbError> insert_ledger_entry(sqlite3* db, const LedgerEntry& entry)
+    {
+        auto stmt = prepare(db, sql::kInsertLedgerEntry);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        sqlite3_stmt* s = stmt->get();
+        if (const int rc = bind_text(s, 1, entry.tx_id); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(s, 2, entry.debit_account_id); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(s, 3, entry.credit_account_id); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = sqlite3_bind_int64(s, 4, entry.amount_cents); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(s, 5, entry.timestamp); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(s, 6, entry.operation_type); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = sqlite3_bind_int64(s, 7, static_cast<std::int64_t>(entry.nonce));
+            rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(s, 8, entry.prev_hash); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(s, 9, entry.curr_hash); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+        if (const int rc = bind_text(s, 10, entry.hmac_signature); rc != SQLITE_OK)
+            return std::unexpected(to_db_error(rc));
+
+        if (const int rc = sqlite3_step(s); rc != SQLITE_DONE)
+            return std::unexpected(to_db_error(rc));
+        return {};
+    }
+
+    std::expected<std::vector<LedgerEntry>, DbError> load_ledger_entries(sqlite3* db)
+    {
+        auto stmt = prepare(db, sql::kSelectLedgerEntries);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        std::vector<LedgerEntry> loaded;
+        int rc = SQLITE_ROW;
+        while ((rc = sqlite3_step(stmt->get())) == SQLITE_ROW)
+        {
+            loaded.push_back(read_ledger_entry(stmt->get()));
+        }
+        if (rc != SQLITE_DONE) return std::unexpected(to_db_error(rc));
+
+        return loaded;
+    }
+}
