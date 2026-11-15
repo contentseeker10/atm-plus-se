@@ -66,19 +66,19 @@ int main()
         auto db = std::make_shared<DatabaseManager>(DB_PATH);
 
         log("Initializing Audit Log...");
-        auto audit = std::make_shared<AuditLog>(std::move(db), HMAC_SECRET);
+        auto audit = std::make_shared<AuditLog>(db, HMAC_SECRET);
 
         log("Initializing Auth Service...");
-        auto auth = std::make_unique<AuthService>(std::move(db), std::move(audit));
+        auto auth = std::make_unique<AuthService>(db, audit);
 
         log("Initializing Anti-Replay Manager...");
         auto anti_replay = std::make_shared<AntiReplayManager>();
 
         log("Initializing Ledger Service...");
-        auto ledger = std::make_shared<LedgerService>(std::move(audit), std::move(anti_replay));
+        auto ledger = std::make_shared<LedgerService>(audit, anti_replay);
 
         log("Initializing ATM Controller...");
-        auto controller = std::make_shared<AtmController>(std::move(vault), std::move(db), std::move(audit), std::move(auth), std::move(ledger));
+        auto controller = std::make_shared<AtmController>(std::move(vault), db, audit, std::move(auth), ledger);
 
         log("Initializing HTTP Server Adapter...");
         HttpServerAdapter http(controller);
