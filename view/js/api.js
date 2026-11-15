@@ -123,6 +123,26 @@ export const api = {
       { Authorization: `Bearer ${token}` }
     );
   },
+  getAutoPayments(token) {
+    return request('GET', '/customer/autopay', null, {
+      Authorization: `Bearer ${token}`
+    });
+  },
+  createAutoPayment(token, payload) {
+    return request('POST', '/customer/autopay', payload, {
+      Authorization: `Bearer ${token}`
+    });
+  },
+  runAutoPayments(token) {
+    return request('POST', '/customer/autopay/run', {}, {
+      Authorization: `Bearer ${token}`
+    });
+  },
+  deleteAutoPayment(token, ruleId) {
+    return request('POST', '/customer/autopay/delete', { ruleId }, {
+      Authorization: `Bearer ${token}`
+    });
+  },
   getVaultDiagnostics(token, masterKey) {
     return request('GET', '/engineer/vault', null, {
       Authorization: `Bearer ${token}`,

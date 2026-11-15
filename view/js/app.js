@@ -127,6 +127,10 @@ class AtmSimulatorApp {
           this.handleDeposit(accountType, bills),
         transfer: (from, to, amountCents) =>
           this.handleTransfer(from, to, amountCents),
+        openAutoPay: () => this.handleOpenAutoPay(),
+        createAutoPay: (payload) => this.handleCreateAutoPay(payload),
+        runAutoPay: () => this.handleRunAutoPay(),
+        deleteAutoPay: (ruleId) => this.handleDeleteAutoPay(ruleId),
         collectCash: () => this.handleCollectDispensedCash(),
         printPendingReceipt: () => this.handlePrintPendingReceipt()
       }
@@ -452,6 +456,20 @@ class AtmSimulatorApp {
 
       this._pendingReceipt = res.receipt || null;
 
+      const protectionNotes = [];
+      if (res.overdraftCoveredCents > 0) {
+        protectionNotes.push(
+          `Includes $${(res.overdraftCoveredCents / 100).toFixed(2)} overdraft protection from Savings`
+        );
+      }
+      if (res.overflowSweptCents > 0) {
+        protectionNotes.push(
+          `$${(res.overflowSweptCents / 100).toFixed(2)} swept to Savings via Overflow Protection`
+        );
+      }
+      const noteSuffix =
+        protectionNotes.length > 0 ? ` (${protectionNotes.join('; ')})` : '';
+
       store.setState({
         accounts: res.accounts || store.getState().accounts,
         lastReceipt: res.receipt || null,
@@ -460,7 +478,7 @@ class AtmSimulatorApp {
         busyMessage: '',
         alert: {
           type: 'success',
-          message: `Transferred $${(amountCents / 100).toFixed(2)} from ${from} to ${to}.`
+          message: `Transferred $${(amountCents / 100).toFixed(2)} from ${from} to ${to}${noteSuffix}.`
         }
       });
     } catch (err) {
@@ -470,6 +488,123 @@ class AtmSimulatorApp {
         alert: {
           type: 'error',
           message: `[${err.errorCode || 'TransferError'}] ${err.message}`
+        }
+      });
+    }
+  }
+
+  async handleOpenAutoPay() {
+    const { token } = store.getState();
+    if (!token) return;
+
+    try {
+      const res = await this._withBusy('LOADING AUTO-PAYMENT RULES...', () =>
+        api.getAutoPayments(token)
+      );
+      store.setState({
+        apsRules: res.rules || [],
+        customerView: CUSTOMER_VIEWS.AUTOPAY,
+        isBusy: false,
+        busyMessage: '',
+        alert: null
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'error',
+          message: `[${err.errorCode || 'AutoPayError'}] ${err.message}`
+        }
+      });
+    }
+  }
+
+  async handleCreateAutoPay(payload) {
+    const { token } = store.getState();
+    if (!token) return;
+
+    try {
+      const res = await this._withBusy('REGISTERING AUTO-PAYMENT RULE...', () =>
+        api.createAutoPayment(token, payload)
+      );
+      store.setState({
+        apsRules: res.rules || [],
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'success',
+          message: `Auto-payment rule ${res.rule?.ruleId || ''} created.`
+        }
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'error',
+          message: `[${err.errorCode || 'AutoPayError'}] ${err.message}`
+        }
+      });
+    }
+  }
+
+  async handleRunAutoPay() {
+    const { token } = store.getState();
+    if (!token) return;
+
+    try {
+      const res = await this._withBusy('EXECUTING DUE AUTO-PAYMENTS...', () =>
+        api.runAutoPayments(token)
+      );
+      const executed = res.executed ?? 0;
+      const failures = res.failures ?? 0;
+      store.setState({
+        accounts: res.accounts || store.getState().accounts,
+        apsRules: res.rules || store.getState().apsRules,
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: failures > 0 ? 'warn' : 'success',
+          message: `Auto-payment run completed: ${executed} executed, ${failures} failed.`
+        }
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'error',
+          message: `[${err.errorCode || 'AutoPayError'}] ${err.message}`
+        }
+      });
+    }
+  }
+
+  async handleDeleteAutoPay(ruleId) {
+    const { token } = store.getState();
+    if (!token || !ruleId) return;
+
+    try {
+      const res = await this._withBusy('REMOVING AUTO-PAYMENT RULE...', () =>
+        api.deleteAutoPayment(token, ruleId)
+      );
+      store.setState({
+        apsRules: res.rules || [],
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'info',
+          message: `Auto-payment rule ${ruleId} removed.`
+        }
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'error',
+          message: `[${err.errorCode || 'AutoPayError'}] ${err.message}`
         }
       });
     }

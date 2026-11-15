@@ -11,6 +11,7 @@ export const CUSTOMER_VIEWS = Object.freeze({
   WITHDRAW: 'WITHDRAW',
   DEPOSIT: 'DEPOSIT',
   TRANSFER: 'TRANSFER',
+  AUTOPAY: 'AUTOPAY',
   DISPENSING: 'DISPENSING',
   COMPLETE: 'COMPLETE'
 });
@@ -43,6 +44,7 @@ const initialState = {
   lastReceipt: null,
   vaultStatus: null,
   auditRecords: [],
+  apsRules: [],
   integrityStatus: null,
   timeoutRemainingSec: 0,
   sessionNonce: 0,
