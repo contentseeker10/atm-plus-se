@@ -25,6 +25,7 @@
 
 #include "storage/sqlite_utils.hpp"
 
+#include <cstdlib>
 #include <format>
 #include <map>
 #include <memory>
@@ -308,5 +309,68 @@ TEST(anti_replay)
     CHECK(chk.get_balance() == chk_after - 5000);
     CHECK(sav.get_balance() == sav_after + 5000);
     CHECK(sut.audit->size() == 2);
+    done();
+}
+
+TEST(security_hardening)
+{
+    begin("Security hardening: secure_zero, env engineer key override and audit tamper check");
+
+    std::string secret = "super-sensitive-pin-1234";
+    const std::size_t secret_len = secret.size();
+    crypto::secure_zero(secret);
+    for (std::size_t i = 0; i < secret_len; ++i)
+    {
+        CHECK(secret[i] == '\0');
+    }
+
+    auto db = std::make_shared<DatabaseManager>(":memory:");
+    auto audit = std::make_shared<AuditLog>(db, "test-hmac-secret");
+    auto replay = std::make_shared<AntiReplayManager>();
+    auto ledger = std::make_shared<LedgerService>(audit, replay);
+    AtmController atm{
+        std::make_unique<CashVault>(std::map<Denomination, Cassette>{}),
+        db,
+        audit,
+        std::make_unique<AuthService>(db, audit),
+        ledger
+    };
+
+#ifdef _WIN32
+    _putenv_s("ATM_ENGINEER_MASTER_KEY", "");
+#else
+    unsetenv("ATM_ENGINEER_MASTER_KEY");
+#endif
+    CHECK(atm.verify_engineer_key("ENG-MASTER-KEY-2026"));
+    CHECK(!atm.verify_engineer_key("WRONG-KEY"));
+
+#ifdef _WIN32
+    _putenv_s("ATM_ENGINEER_MASTER_KEY", "CUSTOM-ENG-KEY-9999");
+#else
+    setenv("ATM_ENGINEER_MASTER_KEY", "CUSTOM-ENG-KEY-9999", 1);
+#endif
+    CHECK(atm.verify_engineer_key("CUSTOM-ENG-KEY-9999"));
+    CHECK(!atm.verify_engineer_key("ENG-MASTER-KEY-2026"));
+
+#ifdef _WIN32
+    _putenv_s("ATM_ENGINEER_MASTER_KEY", "");
+#else
+    unsetenv("ATM_ENGINEER_MASTER_KEY");
+#endif
+    CHECK(atm.verify_engineer_key("ENG-MASTER-KEY-2026"));
+
+    Sut sut;
+    SavingsAccount sav{"SAV-1", "yosyp", 0, 0.0, 0};
+    CheckingAccount chk{"CHK-1", "yosyp", 50000, 0, 1000000, "SAV-1"};
+    CHECK(sut.ledger.transfer(chk, sav, 10000, "TRANSFER", 1).has_value());
+
+    const auto valid_chain = sut.audit->verify_integrity_chain();
+    CHECK(valid_chain.has_value() && valid_chain->ok);
+
+    sut.audit->debug_tamper_amount(0, 999999);
+    const auto broken_chain = sut.audit->verify_integrity_chain();
+    CHECK(broken_chain.has_value() && !broken_chain->ok);
+    CHECK(broken_chain->first_broken_index == 0);
+
     done();
 }
