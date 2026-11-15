@@ -131,6 +131,146 @@ std::expected<void, LedgerError> LedgerService::transfer(Account& from, Account&
     return {};
 }
 
+std::expected<TransferOutcome, LedgerError> LedgerService::transfer_with_protection(
+    Account& from, Account& to, std::int64_t amount_cents,
+    SavingsAccount* from_linked_savings, SavingsAccount* to_linked_savings,
+    std::uint64_t nonce, std::string_view idempotency_key)
+{
+    if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
+    if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
+
+    CheckingAccount* chk_from = dynamic_cast<CheckingAccount*>(&from);
+    const bool needs_coverage =
+        chk_from != nullptr && chk_from->needs_overdraft_coverage(amount_cents);
+    const std::int64_t needed =
+        needs_coverage
+            ? chk_from->get_client_min_cents() - (chk_from->get_balance() - amount_cents)
+            : 0;
+
+    if (needs_coverage)
+    {
+        if (!from_linked_savings || !chk_from->get_linked_savings_id() ||
+            from_linked_savings->get_account_id() == to.get_account_id())
+        {
+            return std::unexpected(LedgerError::InsufficientFunds);
+        }
+        const std::int64_t savings_available =
+            from_linked_savings->get_balance() -
+            from_linked_savings->get_minimum_balance_cents();
+        if (needed > savings_available)
+        {
+            return std::unexpected(amount_cents > chk_from->get_balance()
+                                       ? LedgerError::InsufficientFunds
+                                       : LedgerError::NoOverdraftCoverage);
+        }
+    }
+
+    CheckingAccount* chk_to = dynamic_cast<CheckingAccount*>(&to);
+    if (chk_to != nullptr &&
+        amount_cents > chk_to->get_overflow_max_cents() - chk_to->get_balance())
+    {
+        if (!to_linked_savings || !chk_to->get_linked_savings_id())
+        {
+            return std::unexpected(LedgerError::InvalidAmount);
+        }
+    }
+
+    if (auto r = claim_nonce(nonce, idempotency_key); !r)
+    {
+        return std::unexpected(r.error());
+    }
+
+    if (needs_coverage)
+    {
+        if (auto w = from_linked_savings->cover_overdraft(needed); !w)
+        {
+            return std::unexpected(LedgerError::NoOverdraftCoverage);
+        }
+        if (auto d = chk_from->deposit(needed); !d)
+        {
+            std::ignore = from_linked_savings->deposit(needed);
+            return std::unexpected(map_account_error(d.error()));
+        }
+    }
+
+    auto rollback_overdraft = [&]()
+    {
+        if (needs_coverage)
+        {
+            std::ignore = chk_from->withdraw(needed);
+            std::ignore = from_linked_savings->deposit(needed);
+        }
+    };
+
+    if (auto w = from.withdraw(amount_cents); !w)
+    {
+        rollback_overdraft();
+        return std::unexpected(map_account_error(w.error()));
+    }
+    if (auto d = to.deposit(amount_cents); !d)
+    {
+        std::ignore = from.deposit(amount_cents);
+        rollback_overdraft();
+        return std::unexpected(map_account_error(d.error()));
+    }
+
+    std::int64_t excess = 0;
+    if (chk_to != nullptr && to_linked_savings != nullptr &&
+        chk_to->get_linked_savings_id().has_value())
+    {
+        excess = chk_to->calculate_overflow_excess();
+        if (excess > 0)
+        {
+            if (auto w = chk_to->withdraw(excess); !w)
+            {
+                std::ignore = to.withdraw(amount_cents);
+                std::ignore = from.deposit(amount_cents);
+                rollback_overdraft();
+                return std::unexpected(map_account_error(w.error()));
+            }
+            if (auto d = to_linked_savings->deposit(excess); !d)
+            {
+                std::ignore = chk_to->deposit(excess);
+                std::ignore = to.withdraw(amount_cents);
+                std::ignore = from.deposit(amount_cents);
+                rollback_overdraft();
+                return std::unexpected(map_account_error(d.error()));
+            }
+        }
+    }
+
+    std::vector<LedgerEntry> entries;
+    if (needs_coverage)
+    {
+        entries.push_back(make_entry(from_linked_savings->get_account_id(),
+                                     chk_from->get_account_id(), needed,
+                                     "OVERDRAFT_COVERAGE", nonce));
+    }
+    entries.push_back(make_entry(from.get_account_id(), to.get_account_id(),
+                                 amount_cents, "TRANSFER", nonce));
+    if (excess > 0)
+    {
+        entries.push_back(make_entry(chk_to->get_account_id(),
+                                     to_linked_savings->get_account_id(), excess,
+                                     "OVERFLOW_SWEEP", nonce));
+    }
+
+    if (auto r = append_entries(std::move(entries)); !r)
+    {
+        if (excess > 0)
+        {
+            std::ignore = to_linked_savings->withdraw(excess);
+            std::ignore = chk_to->deposit(excess);
+        }
+        std::ignore = to.withdraw(amount_cents);
+        std::ignore = from.deposit(amount_cents);
+        rollback_overdraft();
+        return std::unexpected(r.error());
+    }
+
+    return TransferOutcome{needed, excess};
+}
+
 std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
     CheckingAccount& checking, SavingsAccount& savings, std::int64_t amount_cents,
     std::uint64_t nonce, std::string_view idempotency_key)

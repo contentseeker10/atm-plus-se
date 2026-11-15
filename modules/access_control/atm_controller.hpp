@@ -67,6 +67,8 @@ struct TransferResult
 {
     std::int64_t source_new_balance_cents{};
     CustomerAccountSnapshot accounts;
+    std::int64_t overdraft_covered_cents{};
+    std::int64_t overflow_swept_cents{};
 };
 
 class AtmController

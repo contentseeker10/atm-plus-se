@@ -72,6 +72,12 @@ struct InvCheckReport
     std::vector<std::string> failures;
 };
 
+struct TransferOutcome
+{
+    std::int64_t overdraft_covered_cents{};
+    std::int64_t overflow_swept_cents{};
+};
+
 class LedgerService
 {
 public:
@@ -83,6 +89,11 @@ public:
                                               std::string_view operation_type,
                                               std::uint64_t nonce,
                                               std::string_view idempotency_key = "");
+
+    std::expected<TransferOutcome, LedgerError> transfer_with_protection(
+        Account& from, Account& to, std::int64_t amount_cents,
+        SavingsAccount* from_linked_savings, SavingsAccount* to_linked_savings,
+        std::uint64_t nonce, std::string_view idempotency_key = "");
 
     std::expected<void, LedgerError> withdraw_with_overdraft(CheckingAccount& checking,
                                                              SavingsAccount& savings,

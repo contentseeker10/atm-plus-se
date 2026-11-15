@@ -731,12 +731,16 @@ void HttpServerAdapter::_register_routes()
         }
 
         const std::string pan = card ? card->number : "";
-        const json receipt =
-            build_receipt(pan, tx_type, *from, *amount, tr->source_new_balance_cents);
+        const json receipt = build_receipt(pan, tx_type, *from, *amount,
+                                           tr->source_new_balance_cents,
+                                           tr->overdraft_covered_cents,
+                                           tr->overflow_swept_cents);
 
         send_json(res, 200, {
             {"status", "ok"},
             {"newBalance", tr->source_new_balance_cents},
+            {"overdraftCoveredCents", tr->overdraft_covered_cents},
+            {"overflowSweptCents", tr->overflow_swept_cents},
             {"accounts", build_accounts_json(tr->accounts)},
             {"receipt", receipt}
         });

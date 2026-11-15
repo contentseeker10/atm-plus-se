@@ -560,19 +560,24 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
         return std::unexpected(AtmError::InvalidAmount);
     }
 
-    if (const auto* chk_from = dynamic_cast<const CheckingAccount*>(from))
-    {
-        if (chk_from->needs_overdraft_coverage(amount_cents))
-        {
-            return std::unexpected(AtmError::InsufficientFunds);
-        }
-    }
+    SavingsAccount* from_linked_savings =
+        (from == accounts->checking.get() && to != accounts->savings.get())
+            ? accounts->savings.get()
+            : nullptr;
 
-    if (const auto* chk_to = dynamic_cast<const CheckingAccount*>(to))
+    std::unique_ptr<SavingsAccount> external_to_savings;
+    SavingsAccount* to_linked_savings = nullptr;
+    if (to == accounts->checking.get())
     {
-        if (amount_cents > chk_to->get_overflow_max_cents() - chk_to->get_balance())
+        to_linked_savings = accounts->savings.get();
+    }
+    else if (const auto* chk_to = dynamic_cast<const CheckingAccount*>(to);
+             chk_to && chk_to->get_linked_savings_id())
+    {
+        if (auto loaded_sav = _db->load_account(*chk_to->get_linked_savings_id()))
         {
-            return std::unexpected(AtmError::InvalidAmount);
+            external_to_savings = downcast<SavingsAccount>(std::move(*loaded_sav));
+            to_linked_savings = external_to_savings.get();
         }
     }
 
@@ -583,22 +588,38 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
     const std::uint64_t nonce = ++_tx_nonce;
     const std::size_t audit_mark = _audit_log->size();
 
-    if (auto posted = _ledger->transfer(*from, *to, amount_cents, "TRANSFER", nonce,
-                                        idempotency_key);
-        !posted)
+    const auto outcome = _ledger->transfer_with_protection(
+        *from, *to, amount_cents, from_linked_savings, to_linked_savings, nonce,
+        idempotency_key);
+    if (!outcome)
     {
         rollback_session_nonce(prev_session_nonce);
-        return std::unexpected(to_atm_error(posted.error()));
+        return std::unexpected(to_atm_error(outcome.error()));
     }
 
-    if (auto committed = commit_operation(std::nullopt, {from, to}, nonce, audit_mark);
+    std::vector<const Account*> updated_accounts{from, to};
+    auto add_unique_account = [&updated_accounts](const Account* acc)
+    {
+        if (acc &&
+            std::find(updated_accounts.begin(), updated_accounts.end(), acc) ==
+                updated_accounts.end())
+        {
+            updated_accounts.push_back(acc);
+        }
+    };
+    if (outcome->overdraft_covered_cents > 0) add_unique_account(from_linked_savings);
+    if (outcome->overflow_swept_cents > 0) add_unique_account(to_linked_savings);
+
+    if (auto committed = commit_operation(std::nullopt, updated_accounts, nonce, audit_mark);
         !committed)
     {
         rollback_session_nonce(prev_session_nonce);
         return std::unexpected(committed.error());
     }
 
-    return TransferResult{from->get_balance(), make_account_snapshot(*accounts)};
+    return TransferResult{from->get_balance(), make_account_snapshot(*accounts),
+                          outcome->overdraft_covered_cents,
+                          outcome->overflow_swept_cents};
 }
 
 std::expected<void, AtmError> AtmController::process_replenish(Denomination denomination,
