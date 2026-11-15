@@ -26,6 +26,7 @@
 #include <cctype>
 #include <charconv>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -440,8 +441,16 @@ void HttpServerAdapter::_mount_frontend()
 
 void HttpServerAdapter::_register_routes()
 {
+    _server.set_payload_max_length(16 * 1024);
+    _server.set_read_timeout(5, 0);
+    _server.set_write_timeout(5, 0);
+
+    const char* env_origin = std::getenv("ATM_ALLOWED_ORIGIN");
+    const std::string allowed_origin =
+        (env_origin != nullptr && *env_origin != '\0') ? std::string{env_origin} : "http://localhost:8080";
+
     _server.set_default_headers({
-        {"Access-Control-Allow-Origin", "*"},
+        {"Access-Control-Allow-Origin", allowed_origin},
         {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
         {"Access-Control-Allow-Headers", "Content-Type, Authorization, X-Master-Key"}
     });
