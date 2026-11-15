@@ -13,8 +13,14 @@
 #include "ledger_service.hpp"
 
 #include "crypto.hpp"
+#include "db.hpp"
+
+#include "storage/operations.hpp"
+
+#include <sqlite3.h>
 
 #include <algorithm>
+#include <format>
 #include <map>
 #include <tuple>
 #include <utility>
@@ -131,12 +137,6 @@ std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
 {
     if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
     if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
-    if (amount_cents > checking.get_balance())
-    {
-        return std::unexpected(LedgerError::InsufficientFunds);
-    }
-
-    if (auto r = claim_nonce(nonce, ""); !r) return r;
 
     const bool needs_coverage = checking.needs_overdraft_coverage(amount_cents);
     const std::int64_t needed =
@@ -146,7 +146,21 @@ std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
 
     if (needs_coverage)
     {
-        if (auto w = savings.withdraw(needed); !w)
+        const std::int64_t savings_available =
+            savings.get_balance() - savings.get_minimum_balance_cents();
+        if (!checking.get_linked_savings_id() || needed > savings_available)
+        {
+            return std::unexpected(amount_cents > checking.get_balance()
+                                       ? LedgerError::InsufficientFunds
+                                       : LedgerError::NoOverdraftCoverage);
+        }
+    }
+
+    if (auto r = claim_nonce(nonce, ""); !r) return r;
+
+    if (needs_coverage)
+    {
+        if (auto w = savings.cover_overdraft(needed); !w)
         {
             return std::unexpected(LedgerError::NoOverdraftCoverage);
         }
@@ -240,6 +254,80 @@ std::expected<void, LedgerError> LedgerService::deposit_with_overflow(
     return {};
 }
 
+std::expected<void, LedgerError> LedgerService::withdraw_from_account(
+    Account& account, std::int64_t amount_cents, std::uint64_t nonce)
+{
+    if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
+    if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
+
+    if (auto r = claim_nonce(nonce, ""); !r) return r;
+
+    if (auto w = account.withdraw(amount_cents); !w)
+    {
+        return std::unexpected(map_account_error(w.error()));
+    }
+
+    if (auto r = append_entries({make_entry(account.get_account_id(),
+                                            ATM_VAULT_ACCOUNT_ID, amount_cents,
+                                            "WITHDRAWAL", nonce)});
+        !r)
+    {
+        std::ignore = account.deposit(amount_cents);
+        return r;
+    }
+    return {};
+}
+
+std::expected<void, LedgerError> LedgerService::deposit_to_account(
+    Account& account, std::int64_t amount_cents, std::uint64_t nonce)
+{
+    if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
+    if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
+
+    if (auto r = claim_nonce(nonce, ""); !r) return r;
+
+    if (auto d = account.deposit(amount_cents); !d)
+    {
+        return std::unexpected(map_account_error(d.error()));
+    }
+
+    if (auto r = append_entries({make_entry(ATM_VAULT_ACCOUNT_ID,
+                                            account.get_account_id(), amount_cents,
+                                            "DEPOSIT", nonce)});
+        !r)
+    {
+        std::ignore = account.withdraw(amount_cents);
+        return r;
+    }
+    return {};
+}
+
+std::expected<std::int64_t, LedgerError> LedgerService::accrue_interest(
+    SavingsAccount& savings, std::uint64_t nonce, int days)
+{
+    if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
+    if (days <= 0) return std::unexpected(LedgerError::InvalidAmount);
+
+    const std::int64_t interest = savings.calculate_interest_cents(days);
+    if (auto r = claim_nonce(nonce, ""); !r) return std::unexpected(r.error());
+    if (interest == 0) return 0;
+
+    if (auto d = savings.deposit(interest); !d)
+    {
+        return std::unexpected(map_account_error(d.error()));
+    }
+
+    if (auto r = append_entries({make_entry(BANK_TREASURY_ACCOUNT_ID,
+                                            savings.get_account_id(), interest,
+                                            "INTEREST", nonce)});
+        !r)
+    {
+        std::ignore = savings.withdraw(interest);
+        return std::unexpected(r.error());
+    }
+    return interest;
+}
+
 std::expected<void, LedgerError> LedgerService::register_aps_rule(ApsRule rule)
 {
     if (rule.rule_id.empty() || rule.payer_account_id.empty() ||
@@ -260,7 +348,8 @@ std::expected<void, LedgerError> LedgerService::register_aps_rule(ApsRule rule)
 
 ApsRunResult LedgerService::run_aps(
     std::chrono::system_clock::time_point now,
-    const std::function<Account*(const std::string&)>& resolve_account)
+    const std::function<Account*(const std::string&)>& resolve_account,
+    const std::function<bool(const Account&, const Account&)>& persist_accounts)
 {
     ApsRunResult result;
 
@@ -302,6 +391,7 @@ ApsRunResult LedgerService::run_aps(
         const std::string idemp_key =
             std::format("aps:{}:{}", rule.rule_id, rule.run_count + 1);
         const std::uint64_t nonce = ++_aps_nonce_counter;
+        const std::size_t audit_mark = _audit_log ? _audit_log->size() : 0;
 
         auto r = transfer(*payer, *payee, amount,
                           rule.fixed_amount ? "APS_FAS" : "APS_VAS", nonce, idemp_key);
@@ -312,12 +402,51 @@ ApsRunResult LedgerService::run_aps(
             continue;
         }
 
+        if (persist_accounts && !persist_accounts(*payer, *payee))
+        {
+            std::ignore = payee->withdraw(amount);
+            std::ignore = payer->deposit(amount);
+            std::ignore = reverse_entries(nonce, audit_mark);
+            result.failures.push_back(
+                std::format("rule {}: persistence failed", rule.rule_id));
+            continue;
+        }
+
         rule.last_run = now;
         ++rule.run_count;
         ++result.executed;
     }
 
     return result;
+}
+
+ApsRunResult LedgerService::run_aps(std::chrono::system_clock::time_point now,
+                                    DatabaseManager& db)
+{
+    std::map<std::string, std::unique_ptr<Account>> cache;
+    auto resolve = [&](const std::string& id) -> Account*
+    {
+        if (const auto it = cache.find(id); it != cache.end())
+        {
+            return it->second.get();
+        }
+        auto acc = db.load_account(id);
+        if (!acc) { return nullptr; }
+        auto [it, inserted] = cache.emplace(id, std::move(*acc));
+        return it->second.get();
+    };
+    auto persist = [&](const Account& payer, const Account& payee) -> bool
+    {
+        return db
+            .execute_transaction(
+                [&](sqlite3* raw)
+                {
+                    return storage::save_account(raw, payer).has_value() &&
+                           storage::save_account(raw, payee).has_value();
+                })
+            .has_value();
+    };
+    return run_aps(now, resolve, persist);
 }
 
 InvCheckReport LedgerService::inv_check(const std::vector<const Account*>& accounts,

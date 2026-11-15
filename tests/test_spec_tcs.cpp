@@ -188,6 +188,18 @@ TEST(overdraft_protection)
     CHECK(log[0].amount_cents == 3000);
     CHECK(log[1].operation_type == "WITHDRAWAL");
     CHECK(log[1].amount_cents == 8000);
+
+    auto r2 = sut.ledger.withdraw_with_overdraft(chk, sav, 20000, 2);
+    CHECK(r2.has_value());
+    CHECK(chk.get_balance() == 10000);
+    CHECK(sav.get_balance() == 27000);
+    CHECK(sut.audit->size() == 4);
+
+    log = sut.audit->entries();
+    CHECK(log[2].operation_type == "OVERDRAFT_COVERAGE");
+    CHECK(log[2].amount_cents == 20000);
+    CHECK(log[3].operation_type == "WITHDRAWAL");
+    CHECK(log[3].amount_cents == 20000);
     done();
 }
 

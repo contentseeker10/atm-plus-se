@@ -21,6 +21,10 @@ SavingsAccount::SavingsAccount(std::string account_id, std::string client_id,
                                std::int64_t minimum_balance_cents)
     : Account(std::move(account_id), std::move(client_id), balance_cents),
       _annual_interest_rate(annual_interest_rate),
+      _interest_rate_bps(std::isfinite(annual_interest_rate)
+                             ? static_cast<std::int32_t>(
+                                   std::llround(annual_interest_rate * 10000.0))
+                             : 0),
       _minimum_balance_cents(minimum_balance_cents)
 {
     if (!SavingsAccount::validate_invariants())
@@ -44,6 +48,25 @@ std::expected<void, AccountError> SavingsAccount::withdraw(std::int64_t amount_c
 std::expected<void, AccountError> SavingsAccount::cover_overdraft(
     std::int64_t deficit_cents)
 { return withdraw(deficit_cents); }
+
+std::int64_t SavingsAccount::calculate_interest_cents(int days) const noexcept
+{
+    if (days <= 0 || _balance_cents <= 0 || _interest_rate_bps <= 0) { return 0; }
+    return (_balance_cents * static_cast<std::int64_t>(_interest_rate_bps) *
+            static_cast<std::int64_t>(days)) /
+           (10000LL * 365LL);
+}
+
+std::expected<std::int64_t, AccountError> SavingsAccount::apply_interest(int days)
+{
+    if (days <= 0) return std::unexpected(AccountError::InvalidAmount);
+    const std::int64_t interest = calculate_interest_cents(days);
+    if (interest > 0)
+    {
+        if (auto d = deposit(interest); !d) return std::unexpected(d.error());
+    }
+    return interest;
+}
 
 bool SavingsAccount::validate_invariants() const noexcept
 {

@@ -670,6 +670,40 @@ UPDATE cards SET pin_hash = '{0}', salt = 'salt123', role = 0 WHERE card_number 
         CHECK(tr->accounts.savings_balance_cents == 15000);
     }
 
+    const auto sav_dep = f.atm->process_deposit({Denomination::D_50}, "Savings");
+    CHECK(sav_dep.has_value());
+    if (sav_dep)
+    {
+        CHECK(sav_dep->total_deposited_cents == 5000);
+        CHECK(sav_dep->overflow_swept_cents == 0);
+        CHECK(sav_dep->target_new_balance_cents == 20000);
+        CHECK(sav_dep->accounts.checking_balance_cents == 20000);
+        CHECK(sav_dep->accounts.savings_balance_cents == 20000);
+    }
+
+    const auto sav_wd = f.atm->process_withdraw(5000, "Savings");
+    CHECK(sav_wd.has_value());
+    if (sav_wd)
+    {
+        CHECK(sav_wd->dispensed_bills.at(Denomination::D_50) == 1);
+        CHECK(sav_wd->overdraft_covered_cents == 0);
+        CHECK(sav_wd->target_new_balance_cents == 15000);
+        CHECK(sav_wd->accounts.checking_balance_cents == 20000);
+        CHECK(sav_wd->accounts.savings_balance_cents == 15000);
+    }
+
+    const auto full_od_wd = f.atm->process_withdraw(25000);
+    CHECK(full_od_wd.has_value());
+    if (full_od_wd)
+    {
+        CHECK(full_od_wd->dispensed_bills.at(Denomination::D_100) == 2);
+        CHECK(full_od_wd->dispensed_bills.at(Denomination::D_50) == 1);
+        CHECK(full_od_wd->overdraft_covered_cents == 15000);
+        CHECK(full_od_wd->target_new_balance_cents == 10000);
+        CHECK(full_od_wd->accounts.checking_balance_cents == 10000);
+        CHECK(full_od_wd->accounts.savings_balance_cents == 0);
+    }
+
     CHECK(f.atm->process_eject_card().has_value());
     CHECK(f.atm->process_insert_card(kCustomerCard).has_value());
 

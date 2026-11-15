@@ -61,7 +61,7 @@ int main()
         const auto seeded = db->execute_transaction(
             [&](sqlite3* raw)
             {
-                if (!storage::seed_demo_data(raw)) return false;
+                if (!storage::seed_demo_data(raw, HMAC_SECRET)) return false;
                 auto loaded = storage::load_cassettes(raw);
                 if (!loaded) return false;
                 cassettes = std::move(*loaded);

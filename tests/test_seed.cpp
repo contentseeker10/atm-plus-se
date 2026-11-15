@@ -16,10 +16,13 @@
 #include "access_control/card.hpp"
 
 #include "accounting/audit.hpp"
+#include "accounting/ledger_service.hpp"
 
 #include "accounts/account.hpp"
 
 #include "db.hpp"
+
+#include "security/anti_replay.hpp"
 
 #include "storage/operations.hpp"
 #include "storage/seed.hpp"
@@ -27,9 +30,11 @@
 
 #include <sqlite3.h>
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 namespace
 {
@@ -73,6 +78,7 @@ TEST(seed_populates_all_tables)
     CHECK(count_rows(db, "accounts") == 6);
     CHECK(count_rows(db, "cards") == 4);
     CHECK(count_rows(db, "vault_cassettes") == 6);
+    CHECK(count_rows(db, "ledger_entries") == 10);
 
     CHECK(balance(db, "CHK-4444") == 154000);
     CHECK(balance(db, "SAV-4444") == 450000);
@@ -115,6 +121,7 @@ TEST(seed_is_idempotent_and_keeps_live_state)
     CHECK(count_rows(db, "accounts") == 6);
     CHECK(count_rows(db, "cards") == 4);
     CHECK(count_rows(db, "vault_cassettes") == 6);
+    CHECK(count_rows(db, "ledger_entries") == 10);
     CHECK(balance(db, "CHK-4444") == 134000);
 
     auto attempts = db.get_failed_attempts("4111-2222-3333-4444");
@@ -150,5 +157,56 @@ TEST(seeded_cards_authenticate)
     CHECK(engineer.has_value());
     CHECK(engineer && engineer->role == UserRole::Engineer);
 
+    done();
+}
+
+TEST(seed_passes_audit_and_inv_check)
+{
+    begin("seed: genesis ledger entries pass AuditLog load and LedgerService inv_check");
+
+    auto db = std::make_shared<DatabaseManager>(":memory:");
+    CHECK(seed(*db));
+
+    auto audit = std::make_shared<AuditLog>(db, "bebra");
+    CHECK(audit->load_from_database().has_value());
+    CHECK(audit->size() == 10);
+
+    const auto chain = audit->verify_integrity_chain();
+    CHECK(chain.has_value() && chain->ok);
+
+    LedgerService ledger{audit, std::make_shared<AntiReplayManager>()};
+    constexpr std::array<std::string_view, 6> account_ids{
+        "CHK-4444", "SAV-4444", "CHK-9999", "SAV-9999", "CHK-7777", "SAV-7777"};
+
+    std::vector<std::unique_ptr<Account>> loaded;
+    std::vector<const Account*> ptrs;
+    loaded.reserve(account_ids.size());
+    ptrs.reserve(account_ids.size());
+    for (const std::string_view id : account_ids)
+    {
+        auto acc = db->load_account(id);
+        CHECK(acc.has_value());
+        if (acc)
+        {
+            ptrs.push_back(acc->get());
+            loaded.push_back(std::move(*acc));
+        }
+    }
+
+    const auto inventory = db->load_vault_inventory();
+    CHECK(inventory.has_value());
+    std::int64_t vault_cash_cents = 0;
+    if (inventory)
+    {
+        for (const auto& [denom, count] : *inventory)
+        {
+            vault_cash_cents += static_cast<std::int64_t>(denom) * count;
+        }
+    }
+    CHECK(vault_cash_cents == 12500000);
+
+    const auto report = ledger.inv_check(ptrs, vault_cash_cents, 0);
+    CHECK(report.passed);
+    CHECK(report.failures.empty());
     done();
 }

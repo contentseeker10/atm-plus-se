@@ -52,6 +52,7 @@ struct WithdrawResult
     std::map<Denomination, int> dispensed_bills;
     std::int64_t overdraft_covered_cents{};
     CustomerAccountSnapshot accounts;
+    std::int64_t target_new_balance_cents{};
 };
 
 struct DepositResult
@@ -59,6 +60,7 @@ struct DepositResult
     std::int64_t total_deposited_cents{};
     std::int64_t overflow_swept_cents{};
     CustomerAccountSnapshot accounts;
+    std::int64_t target_new_balance_cents{};
 };
 
 struct TransferResult
@@ -92,8 +94,10 @@ public:
     std::expected<void, AtmError> process_select_service(ServiceType service);
     std::expected<void, AtmError> process_eject_card();
     std::expected<void, AtmError> process_open_vault(std::string_view engineer_key);
-    std::expected<WithdrawResult, AtmError> process_withdraw(int64_t amount_cents);
-    std::expected<DepositResult, AtmError>  process_deposit(const std::vector<Denomination>& bills);
+    std::expected<WithdrawResult, AtmError> process_withdraw(
+        int64_t amount_cents, std::string_view account_type = "Checking");
+    std::expected<DepositResult, AtmError> process_deposit(
+        const std::vector<Denomination>& bills, std::string_view account_type = "Checking");
     std::expected<TransferResult, AtmError> process_transfer(std::string_view from_account,
                                                              std::string_view to_account,
                                                              std::int64_t amount_cents,

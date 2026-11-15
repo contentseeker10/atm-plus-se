@@ -12,9 +12,12 @@
 
 #include "seed.hpp"
 
+#include "operations.hpp"
 #include "sql.hpp"
 #include "sqlite_utils.hpp"
 
+#include "accounting/ledger.hpp"
+#include "accounting/ledger_service.hpp"
 #include "crypto.hpp"
 
 #include <sqlite3.h>
@@ -24,6 +27,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace storage
 {
@@ -122,7 +126,7 @@ namespace storage
         }
 
         template <typename... Args>
-        std::expected<void, DbError> insert(sqlite3* db, std::string_view query,
+        std::expected<bool, DbError> insert(sqlite3* db, std::string_view query,
                                             const Args&... args)
         {
             auto stmt = prepare(db, query);
@@ -135,7 +139,7 @@ namespace storage
 
             if (rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
                 return std::unexpected(to_db_error(rc));
-            return {};
+            return sqlite3_changes64(db) > 0;
         }
 
         constexpr int role_code(UserRole role) noexcept
@@ -148,50 +152,99 @@ namespace storage
             }
             return 2;
         }
-    } // namespace
+    }
 
-    std::expected<void, DbError> seed_demo_data(sqlite3* db)
+    std::expected<void, DbError> seed_demo_data(sqlite3* db,
+                                                std::string_view hmac_secret)
     {
+        const auto existing_entries = load_ledger_entries(db);
+        if (!existing_entries) return std::unexpected(existing_entries.error());
+
+        const bool record_genesis = existing_entries->empty();
+        std::vector<LedgerEntry> genesis;
+        std::uint64_t nonce = 0;
+
         for (const auto& s : kSavings)
         {
-            if (auto r = insert(db, sql::kInsertSavingsSeed, s.account_id, s.client_id,
-                                s.balance_cents, s.annual_interest_rate,
-                                s.minimum_balance_cents);
-                !r)
-                return r;
+            const auto inserted = insert(db, sql::kInsertSavingsSeed, s.account_id,
+                                         s.client_id, s.balance_cents,
+                                         s.annual_interest_rate, s.minimum_balance_cents);
+            if (!inserted) return std::unexpected(inserted.error());
+            if (record_genesis && *inserted && s.balance_cents > 0)
+            {
+                LedgerEntry entry;
+                entry.debit_account_id = std::string(BANK_TREASURY_ACCOUNT_ID);
+                entry.credit_account_id = std::string(s.account_id);
+                entry.amount_cents = s.balance_cents;
+                entry.operation_type = "OPENING_BALANCE";
+                entry.nonce = ++nonce;
+                genesis.push_back(std::move(entry));
+            }
         }
 
         for (const auto& c : kChecking)
         {
-            if (auto r = insert(db, sql::kInsertCheckingSeed, c.account_id, c.client_id,
-                                c.balance_cents, c.client_min_cents, c.overflow_max_cents,
-                                c.linked_savings_id);
-                !r)
-                return r;
+            const auto inserted = insert(db, sql::kInsertCheckingSeed, c.account_id,
+                                         c.client_id, c.balance_cents, c.client_min_cents,
+                                         c.overflow_max_cents, c.linked_savings_id);
+            if (!inserted) return std::unexpected(inserted.error());
+            if (record_genesis && *inserted && c.balance_cents > 0)
+            {
+                LedgerEntry entry;
+                entry.debit_account_id = std::string(BANK_TREASURY_ACCOUNT_ID);
+                entry.credit_account_id = std::string(c.account_id);
+                entry.amount_cents = c.balance_cents;
+                entry.operation_type = "OPENING_BALANCE";
+                entry.nonce = ++nonce;
+                genesis.push_back(std::move(entry));
+            }
         }
 
         for (const auto& card : kCards)
         {
             const std::string salt = crypto::generate_uuid_v4();
             const std::string pin_hash = crypto::sha256_hex(card.pin, salt);
-            if (auto r =
-                    insert(db, sql::kInsertCardSeed, card.card_number, card.card_holder,
-                           std::string_view{pin_hash}, std::string_view{salt},
-                           role_code(card.role), card.is_blocked, card.is_expired,
-                           card.failed_attempts, card.checking_account_id);
-                !r)
-                return r;
+            const auto inserted =
+                insert(db, sql::kInsertCardSeed, card.card_number, card.card_holder,
+                       std::string_view{pin_hash}, std::string_view{salt},
+                       role_code(card.role), card.is_blocked, card.is_expired,
+                       card.failed_attempts, card.checking_account_id);
+            if (!inserted) return std::unexpected(inserted.error());
         }
 
         for (const auto& cassette : kCassettes)
         {
-            if (auto r = insert(db, sql::kInsertCassetteSeed,
-                                static_cast<std::int64_t>(cassette.denomination),
-                                cassette.bill_count, cassette.capacity);
-                !r)
-                return r;
+            const auto inserted =
+                insert(db, sql::kInsertCassetteSeed,
+                       static_cast<std::int64_t>(cassette.denomination),
+                       cassette.bill_count, cassette.capacity);
+            if (!inserted) return std::unexpected(inserted.error());
+            if (record_genesis && *inserted && cassette.bill_count > 0)
+            {
+                LedgerEntry entry;
+                entry.debit_account_id = std::string(ATM_VAULT_ACCOUNT_ID);
+                entry.credit_account_id = std::string(BANK_TREASURY_ACCOUNT_ID);
+                entry.amount_cents =
+                    static_cast<std::int64_t>(cassette.denomination) * cassette.bill_count;
+                entry.operation_type = "REPLENISHMENT";
+                entry.nonce = ++nonce;
+                genesis.push_back(std::move(entry));
+            }
+        }
+
+        std::string prev_hash(64, '0');
+        for (auto& entry : genesis)
+        {
+            entry.tx_id = crypto::generate_uuid_v4();
+            entry.timestamp = make_ledger_timestamp();
+            entry.prev_hash = prev_hash;
+            entry.curr_hash =
+                crypto::sha256_hex(entry.prev_hash + entry.to_payload_string());
+            entry.hmac_signature = crypto::hmac_sha256_hex(entry.curr_hash, hmac_secret);
+            if (auto r = insert_ledger_entry(db, entry); !r) return r;
+            prev_hash = entry.curr_hash;
         }
 
         return {};
     }
-} // namespace storage
+}
