@@ -87,20 +87,24 @@ public:
     std::expected<void, LedgerError> withdraw_with_overdraft(CheckingAccount& checking,
                                                              SavingsAccount& savings,
                                                              std::int64_t amount_cents,
-                                                             std::uint64_t nonce);
+                                                             std::uint64_t nonce,
+                                                             std::string_view idempotency_key = "");
 
     std::expected<void, LedgerError> deposit_with_overflow(CheckingAccount& checking,
                                                            SavingsAccount& savings,
                                                            std::int64_t amount_cents,
-                                                           std::uint64_t nonce);
+                                                           std::uint64_t nonce,
+                                                           std::string_view idempotency_key = "");
 
     std::expected<void, LedgerError> withdraw_from_account(Account& account,
                                                            std::int64_t amount_cents,
-                                                           std::uint64_t nonce);
+                                                           std::uint64_t nonce,
+                                                           std::string_view idempotency_key = "");
 
     std::expected<void, LedgerError> deposit_to_account(Account& account,
                                                         std::int64_t amount_cents,
-                                                        std::uint64_t nonce);
+                                                        std::uint64_t nonce,
+                                                        std::string_view idempotency_key = "");
 
     std::expected<std::int64_t, LedgerError> accrue_interest(SavingsAccount& savings,
                                                              std::uint64_t nonce,

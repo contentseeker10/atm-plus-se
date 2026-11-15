@@ -39,6 +39,7 @@ public:
 
     bool validate_and_consume(std::string_view session_id, uint64_t incoming_nonce);
     bool is_request_unique(std::string_view idemp_key);
+    bool is_key_seen(std::string_view idemp_key) const;
 
     void purge_expired_keys(std::chrono::seconds max_age);
     void reset_session(std::string_view session_id);

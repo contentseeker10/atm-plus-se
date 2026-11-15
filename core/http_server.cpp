@@ -414,6 +414,33 @@ namespace
 
         return std::nullopt;
     }
+
+    std::string read_idempotency_key(const httplib::Request& req, const json& body)
+    {
+        if (const auto key = read_string(body, "idempotencyKey"); key && !key->empty())
+        {
+            return *key;
+        }
+        if (const std::string header = req.get_header_value("X-Idempotency-Key");
+            !header.empty())
+        {
+            return header;
+        }
+        if (const auto it = body.find("nonce"); it != body.end() && it->is_string())
+        {
+            return it->get<std::string>();
+        }
+        return "";
+    }
+
+    std::optional<std::uint64_t> read_session_nonce(const json& body)
+    {
+        if (const auto val = read_int64(body, "nonce", "sessionNonce"))
+        {
+            return *val <= 0 ? std::uint64_t{0} : static_cast<std::uint64_t>(*val);
+        }
+        return std::nullopt;
+    }
 }
 
 void HttpServerAdapter::_mount_frontend()
@@ -452,7 +479,7 @@ void HttpServerAdapter::_register_routes()
     _server.set_default_headers({
         {"Access-Control-Allow-Origin", allowed_origin},
         {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
-        {"Access-Control-Allow-Headers", "Content-Type, Authorization, X-Master-Key"}
+        {"Access-Control-Allow-Headers", "Content-Type, Authorization, X-Master-Key, X-Idempotency-Key"}
     });
 
     _server.Options(R"(/api/.*)", [](const httplib::Request&, httplib::Response& res)
@@ -582,9 +609,12 @@ void HttpServerAdapter::_register_routes()
 
         const std::string account_type =
             read_string(*body, "accountType", "account").value_or("Checking");
+        const std::string idemp_key = read_idempotency_key(req, *body);
+        const auto session_nonce = read_session_nonce(*body);
         const auto card = _atm_controller->get_active_card();
 
-        const auto wd = _atm_controller->process_withdraw(*amount, account_type);
+        const auto wd = _atm_controller->process_withdraw(*amount, account_type, idemp_key,
+                                                          session_nonce);
         if (!wd)
         {
             return send_atm_error(res, wd.error());
@@ -635,9 +665,12 @@ void HttpServerAdapter::_register_routes()
 
         const std::string account_type =
             read_string(*body, "accountType", "account").value_or("Checking");
+        const std::string idemp_key = read_idempotency_key(req, *body);
+        const auto session_nonce = read_session_nonce(*body);
         const auto card = _atm_controller->get_active_card();
 
-        const auto dep = _atm_controller->process_deposit(*bills, account_type);
+        const auto dep = _atm_controller->process_deposit(*bills, account_type, idemp_key,
+                                                          session_nonce);
         if (!dep)
         {
             return send_atm_error(res, dep.error());
@@ -680,11 +713,12 @@ void HttpServerAdapter::_register_routes()
             return send_atm_error(res, AtmError::InvalidAmount);
         }
 
-        const std::string nonce =
-            read_string(*body, "nonce", "idempotencyKey").value_or("");
+        const std::string idemp_key = read_idempotency_key(req, *body);
+        const auto session_nonce = read_session_nonce(*body);
         const auto card = _atm_controller->get_active_card();
 
-        const auto tr = _atm_controller->process_transfer(*from, *to, *amount, nonce);
+        const auto tr = _atm_controller->process_transfer(*from, *to, *amount, idemp_key,
+                                                          session_nonce);
         if (!tr)
         {
             return send_atm_error(res, tr.error());

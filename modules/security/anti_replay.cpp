@@ -46,6 +46,13 @@ bool AntiReplayManager::is_request_unique(std::string_view idemp_key)
     return true;
 }
 
+bool AntiReplayManager::is_key_seen(std::string_view idemp_key) const
+{
+    if (idemp_key.empty()) { return false; }
+    std::unique_lock lock(_mtx);
+    return _seen_idemp_keys.find(idemp_key) != _seen_idemp_keys.end();
+}
+
 void AntiReplayManager::purge_expired_keys(std::chrono::seconds max_age)
 {
     std::unique_lock lock(_mtx);

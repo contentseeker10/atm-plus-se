@@ -133,7 +133,7 @@ std::expected<void, LedgerError> LedgerService::transfer(Account& from, Account&
 
 std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
     CheckingAccount& checking, SavingsAccount& savings, std::int64_t amount_cents,
-    std::uint64_t nonce)
+    std::uint64_t nonce, std::string_view idempotency_key)
 {
     if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
     if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
@@ -156,7 +156,7 @@ std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
         }
     }
 
-    if (auto r = claim_nonce(nonce, ""); !r) return r;
+    if (auto r = claim_nonce(nonce, idempotency_key); !r) return r;
 
     if (needs_coverage)
     {
@@ -205,12 +205,12 @@ std::expected<void, LedgerError> LedgerService::withdraw_with_overdraft(
 
 std::expected<void, LedgerError> LedgerService::deposit_with_overflow(
     CheckingAccount& checking, SavingsAccount& savings, std::int64_t amount_cents,
-    std::uint64_t nonce)
+    std::uint64_t nonce, std::string_view idempotency_key)
 {
     if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
     if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
 
-    if (auto r = claim_nonce(nonce, ""); !r) return r;
+    if (auto r = claim_nonce(nonce, idempotency_key); !r) return r;
 
     if (auto d = checking.deposit(amount_cents); !d)
     {
@@ -255,12 +255,13 @@ std::expected<void, LedgerError> LedgerService::deposit_with_overflow(
 }
 
 std::expected<void, LedgerError> LedgerService::withdraw_from_account(
-    Account& account, std::int64_t amount_cents, std::uint64_t nonce)
+    Account& account, std::int64_t amount_cents, std::uint64_t nonce,
+    std::string_view idempotency_key)
 {
     if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
     if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
 
-    if (auto r = claim_nonce(nonce, ""); !r) return r;
+    if (auto r = claim_nonce(nonce, idempotency_key); !r) return r;
 
     if (auto w = account.withdraw(amount_cents); !w)
     {
@@ -279,12 +280,13 @@ std::expected<void, LedgerError> LedgerService::withdraw_from_account(
 }
 
 std::expected<void, LedgerError> LedgerService::deposit_to_account(
-    Account& account, std::int64_t amount_cents, std::uint64_t nonce)
+    Account& account, std::int64_t amount_cents, std::uint64_t nonce,
+    std::string_view idempotency_key)
 {
     if (_integrity_compromised) return std::unexpected(LedgerError::IntegrityCompromised);
     if (amount_cents <= 0) return std::unexpected(LedgerError::InvalidAmount);
 
-    if (auto r = claim_nonce(nonce, ""); !r) return r;
+    if (auto r = claim_nonce(nonce, idempotency_key); !r) return r;
 
     if (auto d = account.deposit(amount_cents); !d)
     {

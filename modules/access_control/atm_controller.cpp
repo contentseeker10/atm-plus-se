@@ -373,13 +373,16 @@ int AtmController::get_remaining_pin_attempts(std::string_view card) const
 }
 
 std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
-    int64_t amount_cents, std::string_view account_type)
+    int64_t amount_cents, std::string_view account_type,
+    std::string_view idempotency_key, std::optional<std::uint64_t> incoming_nonce)
 {
     std::unique_lock lock(_mtx);
 
     if (auto session = require_role(UserRole::Customer); !session)
         return std::unexpected(session.error());
     if (!_ledger || !_audit_log) return std::unexpected(AtmError::InternalError);
+    if (auto guard = check_customer_replay_guard(idempotency_key, incoming_nonce); !guard)
+        return std::unexpected(guard.error());
 
     auto plan = _vault->calculate_dispense(amount_cents);
     if (!plan) return std::unexpected(to_atm_error(plan.error()));
@@ -399,8 +402,9 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
 
     const bool is_checking = (target == accounts->checking.get());
     const std::int64_t savings_before = accounts->savings->get_balance();
+    const std::uint64_t prev_session_nonce = _active_session->current_nonce;
 
-    if (auto replayed = consume_session_nonce(); !replayed)
+    if (auto replayed = consume_session_nonce(incoming_nonce); !replayed)
         return std::unexpected(replayed.error());
 
     const std::uint64_t nonce = ++_tx_nonce;
@@ -408,10 +412,13 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
 
     const auto posted =
         is_checking ? _ledger->withdraw_with_overdraft(
-                          *accounts->checking, *accounts->savings, amount_cents, nonce)
-                    : _ledger->withdraw_from_account(*accounts->savings, amount_cents, nonce);
+                          *accounts->checking, *accounts->savings, amount_cents, nonce,
+                          idempotency_key)
+                    : _ledger->withdraw_from_account(*accounts->savings, amount_cents, nonce,
+                                                     idempotency_key);
     if (!posted)
     {
+        rollback_session_nonce(prev_session_nonce);
         return std::unexpected(to_atm_error(posted.error()));
     }
 
@@ -424,6 +431,7 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
             commit_operation(std::move(next_vault), updated_accounts, nonce, audit_mark);
         !committed)
     {
+        rollback_session_nonce(prev_session_nonce);
         return std::unexpected(committed.error());
     }
 
@@ -436,13 +444,16 @@ std::expected<WithdrawResult, AtmError> AtmController::process_withdraw(
 }
 
 std::expected<DepositResult, AtmError> AtmController::process_deposit(
-    const std::vector<Denomination>& bills, std::string_view account_type)
+    const std::vector<Denomination>& bills, std::string_view account_type,
+    std::string_view idempotency_key, std::optional<std::uint64_t> incoming_nonce)
 {
     std::unique_lock lock(_mtx);
 
     if (auto session = require_role(UserRole::Customer); !session)
         return std::unexpected(session.error());
     if (!_ledger || !_audit_log) return std::unexpected(AtmError::InternalError);
+    if (auto guard = check_customer_replay_guard(idempotency_key, incoming_nonce); !guard)
+        return std::unexpected(guard.error());
 
     CashVault next_vault{*_vault};
     if (auto accepted = next_vault.deposit_bills(bills); !accepted)
@@ -460,8 +471,9 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
     const bool is_checking = (target == accounts->checking.get());
     const std::int64_t total_deposited = sum_of(bills);
     const std::int64_t savings_before = accounts->savings->get_balance();
+    const std::uint64_t prev_session_nonce = _active_session->current_nonce;
 
-    if (auto replayed = consume_session_nonce(); !replayed)
+    if (auto replayed = consume_session_nonce(incoming_nonce); !replayed)
         return std::unexpected(replayed.error());
 
     const std::uint64_t nonce = ++_tx_nonce;
@@ -469,10 +481,13 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
 
     const auto posted =
         is_checking ? _ledger->deposit_with_overflow(
-                          *accounts->checking, *accounts->savings, total_deposited, nonce)
-                    : _ledger->deposit_to_account(*accounts->savings, total_deposited, nonce);
+                          *accounts->checking, *accounts->savings, total_deposited, nonce,
+                          idempotency_key)
+                    : _ledger->deposit_to_account(*accounts->savings, total_deposited, nonce,
+                                                  idempotency_key);
     if (!posted)
     {
+        rollback_session_nonce(prev_session_nonce);
         return std::unexpected(to_atm_error(posted.error()));
     }
 
@@ -485,6 +500,7 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
             commit_operation(std::move(next_vault), updated_accounts, nonce, audit_mark);
         !committed)
     {
+        rollback_session_nonce(prev_session_nonce);
         return std::unexpected(committed.error());
     }
 
@@ -498,14 +514,17 @@ std::expected<DepositResult, AtmError> AtmController::process_deposit(
 
 std::expected<TransferResult, AtmError> AtmController::process_transfer(
     std::string_view from_account, std::string_view to_account,
-    std::int64_t amount_cents, std::string_view idempotency_key)
+    std::int64_t amount_cents, std::string_view idempotency_key,
+    std::optional<std::uint64_t> incoming_nonce)
 {
     std::unique_lock lock(_mtx);
 
     if (auto session = require_role(UserRole::Customer); !session)
         return std::unexpected(session.error());
-    if (amount_cents <= 0) return std::unexpected(AtmError::InvalidAmount);
     if (!_ledger || !_audit_log) return std::unexpected(AtmError::InternalError);
+    if (auto guard = check_customer_replay_guard(idempotency_key, incoming_nonce); !guard)
+        return std::unexpected(guard.error());
+    if (amount_cents <= 0) return std::unexpected(AtmError::InvalidAmount);
 
     auto accounts = load_customer_accounts(*_db, _active_session->record.number);
     if (!accounts) return std::unexpected(accounts.error());
@@ -557,7 +576,8 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
         }
     }
 
-    if (auto replayed = consume_session_nonce(); !replayed)
+    const std::uint64_t prev_session_nonce = _active_session->current_nonce;
+    if (auto replayed = consume_session_nonce(incoming_nonce); !replayed)
         return std::unexpected(replayed.error());
 
     const std::uint64_t nonce = ++_tx_nonce;
@@ -567,12 +587,14 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
                                         idempotency_key);
         !posted)
     {
+        rollback_session_nonce(prev_session_nonce);
         return std::unexpected(to_atm_error(posted.error()));
     }
 
     if (auto committed = commit_operation(std::nullopt, {from, to}, nonce, audit_mark);
         !committed)
     {
+        rollback_session_nonce(prev_session_nonce);
         return std::unexpected(committed.error());
     }
 
@@ -699,16 +721,64 @@ std::expected<void, AtmError> AtmController::require_role(UserRole role)
     return std::unexpected(AtmError::Unauthorized);
 }
 
-std::expected<void, AtmError> AtmController::consume_session_nonce()
+std::expected<void, AtmError> AtmController::check_customer_replay_guard(
+    std::string_view idempotency_key, std::optional<std::uint64_t> incoming_nonce) const
 {
-    if (!_active_session.has_value()) return std::unexpected(AtmError::NoActiveSession);
-    const std::uint64_t next = _active_session->next_nonce();
-    if (_anti_replay &&
-        !_anti_replay->validate_and_consume(_active_session->session_id, next))
+    if (!_ledger->integrity_ok())
+    {
+        return std::unexpected(AtmError::CryptoVerificationFailed);
+    }
+    if (incoming_nonce.has_value() && *incoming_nonce <= _active_session->current_nonce)
+    {
+        return std::unexpected(AtmError::ReplayAttackDetected);
+    }
+    if (!idempotency_key.empty() && _anti_replay &&
+        _anti_replay->is_key_seen(idempotency_key))
     {
         return std::unexpected(AtmError::ReplayAttackDetected);
     }
     return {};
+}
+
+std::expected<void, AtmError> AtmController::consume_session_nonce(
+    std::optional<std::uint64_t> incoming_nonce)
+{
+    if (!_active_session.has_value()) return std::unexpected(AtmError::NoActiveSession);
+    if (incoming_nonce.has_value())
+    {
+        if (_anti_replay)
+        {
+            if (!_anti_replay->validate_and_consume(_active_session->session_id,
+                                                    *incoming_nonce))
+            {
+                return std::unexpected(AtmError::ReplayAttackDetected);
+            }
+        }
+        else if (*incoming_nonce <= _active_session->current_nonce)
+        {
+            return std::unexpected(AtmError::ReplayAttackDetected);
+        }
+        _active_session->current_nonce = *incoming_nonce;
+        return {};
+    }
+    const std::uint64_t next = _active_session->next_nonce();
+    if (_anti_replay &&
+        !_anti_replay->validate_and_consume(_active_session->session_id, next))
+    {
+        --_active_session->current_nonce;
+        return std::unexpected(AtmError::ReplayAttackDetected);
+    }
+    return {};
+}
+
+void AtmController::rollback_session_nonce(std::uint64_t previous_nonce)
+{
+    if (!_active_session.has_value()) return;
+    _active_session->current_nonce = previous_nonce;
+    if (_anti_replay)
+    {
+        _anti_replay->register_session(_active_session->session_id, previous_nonce);
+    }
 }
 
 std::expected<void, AtmError> AtmController::commit_operation(

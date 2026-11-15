@@ -95,13 +95,17 @@ public:
     std::expected<void, AtmError> process_eject_card();
     std::expected<void, AtmError> process_open_vault(std::string_view engineer_key);
     std::expected<WithdrawResult, AtmError> process_withdraw(
-        int64_t amount_cents, std::string_view account_type = "Checking");
+        int64_t amount_cents, std::string_view account_type = "Checking",
+        std::string_view idempotency_key = "",
+        std::optional<std::uint64_t> incoming_nonce = std::nullopt);
     std::expected<DepositResult, AtmError> process_deposit(
-        const std::vector<Denomination>& bills, std::string_view account_type = "Checking");
-    std::expected<TransferResult, AtmError> process_transfer(std::string_view from_account,
-                                                             std::string_view to_account,
-                                                             std::int64_t amount_cents,
-                                                             std::string_view idempotency_key = "");
+        const std::vector<Denomination>& bills, std::string_view account_type = "Checking",
+        std::string_view idempotency_key = "",
+        std::optional<std::uint64_t> incoming_nonce = std::nullopt);
+    std::expected<TransferResult, AtmError> process_transfer(
+        std::string_view from_account, std::string_view to_account,
+        std::int64_t amount_cents, std::string_view idempotency_key = "",
+        std::optional<std::uint64_t> incoming_nonce = std::nullopt);
     std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
 
     std::expected<CustomerAccountSnapshot, AtmError> get_customer_accounts();
@@ -132,7 +136,12 @@ private:
     inline static constexpr std::string_view kDefaultEngineerKey = "ENG-MASTER-KEY-2026";
 
     std::expected<void, AtmError> require_role(UserRole role);
-    std::expected<void, AtmError> consume_session_nonce();
+    std::expected<void, AtmError> check_customer_replay_guard(
+        std::string_view idempotency_key,
+        std::optional<std::uint64_t> incoming_nonce) const;
+    std::expected<void, AtmError> consume_session_nonce(
+        std::optional<std::uint64_t> incoming_nonce = std::nullopt);
+    void rollback_session_nonce(std::uint64_t previous_nonce);
     std::expected<void, AtmError> commit_operation(
         std::optional<CashVault> next_vault, const std::vector<const Account*>& accounts,
         std::uint64_t nonce, std::size_t audit_mark);
