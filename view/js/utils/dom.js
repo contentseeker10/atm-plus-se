@@ -30,8 +30,8 @@ export function formatDenomLabel(denomCents) {
 export function maskCardNumber(pan) {
   if (!pan) return '****-****-****-****';
   const digits = String(pan).replace(/\D/g, '');
-  if (digits.length < 8) return escapeHtml(pan);
-  return `${digits.slice(0, 4)}-****-****-${digits.slice(-4)}`;
+  if (digits.length < 4) return String(pan);
+  return `****-****-****-${digits.slice(-4)}`;
 }
 
 export function shortHash(hash, len = 10) {

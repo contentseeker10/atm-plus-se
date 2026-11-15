@@ -1,6 +1,4 @@
-import { CONFIG } from '../config.js';
 import { ENGINEER_VIEWS, store } from '../state.js';
-import { toggleMockAuditTamper } from '../api.js';
 import {
   escapeHtml,
   formatCents,
@@ -368,7 +366,7 @@ export class EngineerUiComponent {
 
     const rowsHtml =
       state.auditRecords.length === 0
-        ? `<tr><td colspan="5">No audit records loaded.</td></tr>`
+        ? `<tr><td colspan="6">No audit records loaded.</td></tr>`
         : state.auditRecords
             .map(
               (rec) => `
@@ -376,20 +374,13 @@ export class EngineerUiComponent {
                   <td>#${escapeHtml(rec.id)}</td>
                   <td>${escapeHtml(rec.timestamp)}</td>
                   <td><strong>${escapeHtml(rec.event)}</strong> (${escapeHtml(rec.detail || '')})</td>
+                  <td>${escapeHtml(formatCents(rec.amountCents))}</td>
                   <td title="${escapeHtml(rec.prevHash)}">${shortHash(rec.prevHash, 8)}</td>
                   <td title="${escapeHtml(rec.hash)}">${shortHash(rec.hash, 8)}</td>
                 </tr>
               `
             )
             .join('');
-
-    const mockTamperBtnHtml = CONFIG.USE_MOCK
-      ? `
-        <button type="button" id="audit-sim-tamper-btn" class="screen-btn screen-btn-danger">
-          Simulate/Restore DB Tamper
-        </button>
-      `
-      : '';
 
     this._viewportEl.innerHTML = `
       <div class="screen-panel">
@@ -399,7 +390,6 @@ export class EngineerUiComponent {
             <p class="screen-subtitle">Tamper-evident hash chain of all ledger and hardware events.</p>
           </div>
           <div style="display:flex; gap:6px;">
-            ${mockTamperBtnHtml}
             <button
               type="button"
               id="audit-verify-btn"
@@ -419,7 +409,8 @@ export class EngineerUiComponent {
               <tr>
                 <th>ID</th>
                 <th>Timestamp</th>
-                <th>EventType / Detail</th>
+                <th>Operation / Accounts</th>
+                <th>Amount</th>
                 <th>PreviousHash</th>
                 <th>RecordHash</th>
               </tr>
@@ -434,15 +425,6 @@ export class EngineerUiComponent {
 
     qs('#audit-verify-btn', this._viewportEl)?.addEventListener('click', () => {
       this._actions.verifyAuditIntegrity();
-    });
-
-    qs('#audit-sim-tamper-btn', this._viewportEl)?.addEventListener('click', () => {
-      const tampered = toggleMockAuditTamper();
-      this._actions.openAuditView(
-        tampered
-          ? { type: 'warn', message: 'Simulated attacker tampering on Record #2. Run Verify Integrity to test detection.' }
-          : { type: 'info', message: 'Restored original Record #2 payload. Run Verify Integrity to confirm.' }
-      );
     });
   }
 }
