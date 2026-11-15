@@ -123,6 +123,10 @@ public:
 
     std::expected<void, LedgerError> register_aps_rule(ApsRule rule);
 
+    std::vector<ApsRule> get_aps_rules(std::string_view payer_account_id = "") const;
+
+    bool remove_aps_rule(std::string_view rule_id);
+
     ApsRunResult run_aps(
         std::chrono::system_clock::time_point now,
         const std::function<Account*(const std::string&)>& resolve_account,

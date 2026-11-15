@@ -488,6 +488,32 @@ std::expected<void, LedgerError> LedgerService::register_aps_rule(ApsRule rule)
     return {};
 }
 
+std::vector<ApsRule> LedgerService::get_aps_rules(
+    std::string_view payer_account_id) const
+{
+    std::unique_lock lock(_aps_mtx);
+    if (payer_account_id.empty()) { return _aps_rules; }
+
+    std::vector<ApsRule> filtered;
+    for (const auto& rule : _aps_rules)
+    {
+        if (rule.payer_account_id == payer_account_id)
+        {
+            filtered.push_back(rule);
+        }
+    }
+    return filtered;
+}
+
+bool LedgerService::remove_aps_rule(std::string_view rule_id)
+{
+    if (rule_id.empty()) { return false; }
+    std::unique_lock lock(_aps_mtx);
+    const std::size_t removed = std::erase_if(
+        _aps_rules, [rule_id](const ApsRule& r) { return r.rule_id == rule_id; });
+    return removed > 0;
+}
+
 ApsRunResult LedgerService::run_aps(
     std::chrono::system_clock::time_point now,
     const std::function<Account*(const std::string&)>& resolve_account,

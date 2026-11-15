@@ -15,6 +15,7 @@
 #include "db.hpp"
 
 #include "accounting/audit.hpp"
+#include "accounting/ledger_service.hpp"
 
 #include "atm_state.hpp"
 #include "auth_service.hpp"
@@ -35,7 +36,6 @@ using namespace std::literals::chrono_literals;
 class Account;
 class AntiReplayManager;
 class CashVault;
-class LedgerService;
 
 struct CustomerAccountSnapshot
 {
@@ -69,6 +69,12 @@ struct TransferResult
     CustomerAccountSnapshot accounts;
     std::int64_t overdraft_covered_cents{};
     std::int64_t overflow_swept_cents{};
+};
+
+struct CustomerApsRunResult
+{
+    ApsRunResult run;
+    CustomerAccountSnapshot accounts;
 };
 
 class AtmController
@@ -111,6 +117,12 @@ public:
     std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
 
     std::expected<CustomerAccountSnapshot, AtmError> get_customer_accounts();
+    std::expected<std::vector<ApsRule>, AtmError> get_customer_aps_rules();
+    std::expected<ApsRule, AtmError> create_customer_aps_rule(
+        std::string_view from_account, std::string_view to_account,
+        std::int64_t amount_cents, bool fixed_amount, std::int64_t period_seconds);
+    std::expected<CustomerApsRunResult, AtmError> run_customer_aps();
+    std::expected<void, AtmError> delete_customer_aps_rule(std::string_view rule_id);
     std::expected<std::vector<LedgerEntry>, AtmError> get_audit_entries(
         std::size_t offset = 0, std::size_t limit = 0);
     std::expected<ChainVerification, AtmError> verify_audit_integrity();

@@ -17,6 +17,7 @@
 
 #include "access_control/atm_controller.hpp"
 #include "accounting/ledger.hpp"
+#include "accounting/ledger_service.hpp"
 #include "cash/cash_vault.hpp"
 
 #include <nlohmann/json.hpp>
@@ -318,6 +319,29 @@ namespace
                 {"balance", snap.savings_balance_cents}
             }
         });
+    }
+
+    json build_aps_rule_json(const ApsRule& rule)
+    {
+        return {
+            {"ruleId", rule.rule_id},
+            {"from", rule.payer_account_id},
+            {"to", rule.payee_account_id},
+            {"amountCents", rule.amount_cents},
+            {"fixedAmount", rule.fixed_amount},
+            {"periodSeconds", rule.period.count()},
+            {"runCount", rule.run_count}
+        };
+    }
+
+    json build_aps_rules_json(const std::vector<ApsRule>& rules)
+    {
+        json arr = json::array();
+        for (const auto& rule : rules)
+        {
+            arr.push_back(build_aps_rule_json(rule));
+        }
+        return arr;
     }
 
     json build_vault_json(const CashVault& vault, int dispense_cycles, int deposit_cycles)
@@ -743,6 +767,91 @@ void HttpServerAdapter::_register_routes()
             {"overflowSweptCents", tr->overflow_swept_cents},
             {"accounts", build_accounts_json(tr->accounts)},
             {"receipt", receipt}
+        });
+    });
+
+    _server.Get("/api/customer/autopay", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_bearer_token(*_atm_controller, req, res)) return;
+
+        const auto rules = _atm_controller->get_customer_aps_rules();
+        if (!rules) return send_atm_error(res, rules.error());
+
+        send_json(res, 200, {{"rules", build_aps_rules_json(*rules)}});
+    });
+
+    _server.Post("/api/customer/autopay", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_bearer_token(*_atm_controller, req, res)) return;
+
+        const auto body = parse_json_body(req, res);
+        if (!body) return;
+
+        const auto from = read_string(*body, "from", "payerAccountId");
+        const auto to = read_string(*body, "to", "payeeAccountId");
+        const auto amount = read_int64(*body, "amount", "amountCents");
+        if (!from || !to || from->empty() || to->empty() || !amount)
+        {
+            return send_atm_error(res, AtmError::InvalidAmount);
+        }
+
+        bool fixed_amount = true;
+        if (const auto it = body->find("fixedAmount"); it != body->end() && it->is_boolean())
+        {
+            fixed_amount = it->get<bool>();
+        }
+        const std::int64_t period_seconds =
+            read_int64(*body, "periodSeconds").value_or(0);
+
+        const auto created = _atm_controller->create_customer_aps_rule(
+            *from, *to, *amount, fixed_amount, period_seconds);
+        if (!created) return send_atm_error(res, created.error());
+
+        const auto rules = _atm_controller->get_customer_aps_rules();
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"rule", build_aps_rule_json(*created)},
+            {"rules", rules ? build_aps_rules_json(*rules) : json::array()}
+        });
+    });
+
+    _server.Post("/api/customer/autopay/run", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_bearer_token(*_atm_controller, req, res)) return;
+
+        const auto executed = _atm_controller->run_customer_aps();
+        if (!executed) return send_atm_error(res, executed.error());
+
+        const auto rules = _atm_controller->get_customer_aps_rules();
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"executed", executed->run.executed},
+            {"failures", executed->run.failures},
+            {"accounts", build_accounts_json(executed->accounts)},
+            {"rules", rules ? build_aps_rules_json(*rules) : json::array()}
+        });
+    });
+
+    _server.Post("/api/customer/autopay/delete", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_bearer_token(*_atm_controller, req, res)) return;
+
+        const auto body = parse_json_body(req, res);
+        if (!body) return;
+
+        const auto rule_id = read_string(*body, "ruleId", "id");
+        if (!rule_id || rule_id->empty())
+        {
+            return send_atm_error(res, AtmError::InvalidAmount);
+        }
+
+        const auto deleted = _atm_controller->delete_customer_aps_rule(*rule_id);
+        if (!deleted) return send_atm_error(res, deleted.error());
+
+        const auto rules = _atm_controller->get_customer_aps_rules();
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"rules", rules ? build_aps_rules_json(*rules) : json::array()}
         });
     });
 

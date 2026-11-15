@@ -27,6 +27,7 @@
 #include "storage/operations.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <map>
 #include <optional>
@@ -179,6 +180,30 @@ namespace
                                        accounts.checking->get_overflow_max_cents(),
                                        accounts.savings->get_account_id(),
                                        accounts.savings->get_balance()};
+    }
+
+    std::expected<Account*, AtmError> resolve_target_account(
+        DatabaseManager& db, CustomerAccounts& accounts, std::string_view target,
+        std::unique_ptr<Account>& external_owner)
+    {
+        if (Account* own = resolve_own_account(target, accounts))
+        {
+            return own;
+        }
+        if (auto loaded = db.load_account(target); loaded)
+        {
+            external_owner = std::move(*loaded);
+            return external_owner.get();
+        }
+        auto card = db.load_card(target, false);
+        if (!card) return std::unexpected(to_atm_error(card.error()));
+        if (!card->account_id) return std::unexpected(AtmError::CardNotFound);
+
+        auto card_account = db.load_account(*card->account_id);
+        if (!card_account) return std::unexpected(to_atm_error(card_account.error()));
+
+        external_owner = std::move(*card_account);
+        return external_owner.get();
     }
 }
 
@@ -533,27 +558,10 @@ std::expected<TransferResult, AtmError> AtmController::process_transfer(
     if (!from) return std::unexpected(AtmError::Unauthorized);
 
     std::unique_ptr<Account> external_to;
-    Account* to = resolve_own_account(to_account, *accounts);
-    if (!to)
-    {
-        if (auto loaded = _db->load_account(to_account); loaded)
-        {
-            external_to = std::move(*loaded);
-            to = external_to.get();
-        }
-        else
-        {
-            auto card = _db->load_card(to_account, false);
-            if (!card) return std::unexpected(to_atm_error(card.error()));
-            if (!card->account_id) return std::unexpected(AtmError::CardNotFound);
-
-            auto card_account = _db->load_account(*card->account_id);
-            if (!card_account) return std::unexpected(to_atm_error(card_account.error()));
-
-            external_to = std::move(*card_account);
-            to = external_to.get();
-        }
-    }
+    auto target_res =
+        resolve_target_account(*_db, *accounts, to_account, external_to);
+    if (!target_res) return std::unexpected(target_res.error());
+    Account* to = *target_res;
 
     if (from->get_account_id() == to->get_account_id())
     {
@@ -671,6 +679,133 @@ std::expected<CustomerAccountSnapshot, AtmError> AtmController::get_customer_acc
     if (!accounts) return std::unexpected(accounts.error());
 
     return make_account_snapshot(*accounts);
+}
+
+std::expected<std::vector<ApsRule>, AtmError> AtmController::get_customer_aps_rules()
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Customer); !session)
+        return std::unexpected(session.error());
+    if (!_ledger) return std::unexpected(AtmError::InternalError);
+
+    auto accounts = load_customer_accounts(*_db, _active_session->record.number);
+    if (!accounts) return std::unexpected(accounts.error());
+
+    const std::string& checking_id = accounts->checking->get_account_id();
+    const std::string& savings_id = accounts->savings->get_account_id();
+
+    std::vector<ApsRule> rules;
+    for (auto& rule : _ledger->get_aps_rules())
+    {
+        if (rule.payer_account_id == checking_id || rule.payer_account_id == savings_id)
+        {
+            rules.push_back(std::move(rule));
+        }
+    }
+    return rules;
+}
+
+std::expected<ApsRule, AtmError> AtmController::create_customer_aps_rule(
+    std::string_view from_account, std::string_view to_account,
+    std::int64_t amount_cents, bool fixed_amount, std::int64_t period_seconds)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Customer); !session)
+        return std::unexpected(session.error());
+    if (!_ledger) return std::unexpected(AtmError::InternalError);
+    if (!_ledger->integrity_ok())
+        return std::unexpected(AtmError::CryptoVerificationFailed);
+    if (from_account.empty() || to_account.empty() || amount_cents <= 0 ||
+        period_seconds < 0)
+    {
+        return std::unexpected(AtmError::InvalidAmount);
+    }
+
+    auto accounts = load_customer_accounts(*_db, _active_session->record.number);
+    if (!accounts) return std::unexpected(accounts.error());
+
+    Account* from = resolve_own_account(from_account, *accounts);
+    if (!from) return std::unexpected(AtmError::Unauthorized);
+
+    std::unique_ptr<Account> external_to;
+    auto target_res = resolve_target_account(*_db, *accounts, to_account, external_to);
+    if (!target_res) return std::unexpected(target_res.error());
+    Account* to = *target_res;
+
+    if (from->get_account_id() == to->get_account_id())
+    {
+        return std::unexpected(AtmError::InvalidAmount);
+    }
+
+    ApsRule rule;
+    rule.rule_id = "APS-" + crypto::generate_uuid_v4().substr(0, 8);
+    rule.payer_account_id = from->get_account_id();
+    rule.payee_account_id = to->get_account_id();
+    rule.amount_cents = amount_cents;
+    rule.fixed_amount = fixed_amount;
+    rule.period = std::chrono::seconds{period_seconds};
+
+    if (auto reg = _ledger->register_aps_rule(rule); !reg)
+    {
+        return std::unexpected(to_atm_error(reg.error()));
+    }
+    return rule;
+}
+
+std::expected<CustomerApsRunResult, AtmError> AtmController::run_customer_aps()
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Customer); !session)
+        return std::unexpected(session.error());
+    if (!_ledger) return std::unexpected(AtmError::InternalError);
+    if (!_ledger->integrity_ok())
+        return std::unexpected(AtmError::CryptoVerificationFailed);
+
+    ApsRunResult run = _ledger->run_aps(std::chrono::system_clock::now(), *_db);
+
+    auto accounts = load_customer_accounts(*_db, _active_session->record.number);
+    if (!accounts) return std::unexpected(accounts.error());
+
+    return CustomerApsRunResult{std::move(run), make_account_snapshot(*accounts)};
+}
+
+std::expected<void, AtmError> AtmController::delete_customer_aps_rule(
+    std::string_view rule_id)
+{
+    std::unique_lock lock(_mtx);
+
+    if (auto session = require_role(UserRole::Customer); !session)
+        return std::unexpected(session.error());
+    if (!_ledger) return std::unexpected(AtmError::InternalError);
+    if (rule_id.empty()) return std::unexpected(AtmError::InvalidAmount);
+
+    auto accounts = load_customer_accounts(*_db, _active_session->record.number);
+    if (!accounts) return std::unexpected(accounts.error());
+
+    const std::string& checking_id = accounts->checking->get_account_id();
+    const std::string& savings_id = accounts->savings->get_account_id();
+
+    bool found = false;
+    bool owned = false;
+    for (const auto& rule : _ledger->get_aps_rules())
+    {
+        if (rule.rule_id == rule_id)
+        {
+            found = true;
+            owned = (rule.payer_account_id == checking_id ||
+                     rule.payer_account_id == savings_id);
+            break;
+        }
+    }
+
+    if (!found) return std::unexpected(AtmError::InvalidAmount);
+    if (!owned) return std::unexpected(AtmError::Unauthorized);
+    if (!_ledger->remove_aps_rule(rule_id))
+        return std::unexpected(AtmError::InternalError);
+    return {};
 }
 
 std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entries(
