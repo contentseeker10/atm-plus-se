@@ -1,3 +1,4 @@
+import { DEMO_CARDS } from '../config.js';
 import { ENGINEER_VIEWS, store } from '../state.js';
 import {
   escapeHtml,
@@ -253,7 +254,7 @@ export class EngineerUiComponent {
             <div class="cassette-meter">
               <div class="cassette-meter-fill" style="width:${pct}%"></div>
             </div>
-            <div class="cassette-meta">
+            <div class="cassette-meta" style="flex-wrap:wrap; gap:4px;">
               <button
                 type="button"
                 class="replenish-inline-btn"
@@ -281,14 +282,34 @@ export class EngineerUiComponent {
               >
                 Fill Max
               </button>
+              <button
+                type="button"
+                class="replenish-inline-btn"
+                data-set-idx="${idx}"
+                data-set-count="0"
+                ${!vault.doorOpen || c.count === 0 || state.isBusy ? 'disabled' : ''}
+              >
+                Empty (0)
+              </button>
             </div>
           </div>
         `;
       })
       .join('');
 
+    const customerCards = DEMO_CARDS.filter((c) => c.role === 'Customer');
+    const overrides = state.cardStatusOverrides || {};
+    const firstBlocked = customerCards.find((c) => {
+      const ov = overrides[c.cardNumber];
+      return ov && ov.blocked !== undefined ? ov.blocked : c.blocked;
+    });
+    const defaultPan = firstBlocked ? firstBlocked.cardNumber : '4111-0000-0000-9999';
+    const datalistOptions = customerCards
+      .map((c) => `<option value="${escapeHtml(c.cardNumber)}">${escapeHtml(c.cardHolder)}</option>`)
+      .join('');
+
     this._viewportEl.innerHTML = `
-      <div class="screen-panel">
+      <div class="screen-panel" style="gap:10px;">
         <div class="eng-header-bar">
           <div>
             <h2 class="screen-title">CASH REPLENISHMENT &amp; CASSETTES</h2>
@@ -313,6 +334,36 @@ export class EngineerUiComponent {
         <div class="cassettes-grid">
           ${cassettesHtml}
         </div>
+
+        <form id="eng-unlock-card-form" class="cassette-card" style="gap:6px;">
+          <label for="eng-unlock-pan" class="screen-label">
+            CARD SECURITY &amp; ACCESS RECOVERY (UNLOCK BLOCKED CARD PAN):
+          </label>
+          <div style="display:flex; gap:8px;">
+            <input
+              type="text"
+              id="eng-unlock-pan"
+              list="eng-known-pans"
+              class="screen-input"
+              value="${escapeHtml(defaultPan)}"
+              placeholder="e.g. 4111-0000-0000-9999"
+              autocomplete="off"
+              required
+            >
+            <datalist id="eng-known-pans">
+              ${datalistOptions}
+            </datalist>
+            <button
+              type="submit"
+              id="eng-unlock-btn"
+              class="screen-btn screen-btn-primary"
+              style="white-space:nowrap;"
+              ${state.isBusy ? 'disabled' : ''}
+            >
+              Unlock Card &amp; Reset PIN Tries
+            </button>
+          </div>
+        </form>
       </div>
     `;
 
@@ -327,6 +378,30 @@ export class EngineerUiComponent {
         this._actions.replenishCassette(cassetteIndex, addCount);
       });
     });
+
+    this._viewportEl.querySelectorAll('[data-set-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cassetteIndex = Number(btn.getAttribute('data-set-idx'));
+        const setCount = Number(btn.getAttribute('data-set-count'));
+        this._actions.replaceCassette(cassetteIndex, setCount);
+      });
+    });
+
+    const unlockForm = qs('#eng-unlock-card-form', this._viewportEl);
+    const unlockPanInput = qs('#eng-unlock-pan', this._viewportEl);
+    if (unlockForm && unlockPanInput) {
+      unlockForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const pan = unlockPanInput.value.trim();
+        if (!pan) {
+          store.setState({
+            alert: { type: 'error', message: 'Please enter a valid card PAN to unlock.' }
+          });
+          return;
+        }
+        this._actions.unlockCard(pan);
+      });
+    }
   }
 
   _renderAudit(state) {
@@ -343,6 +418,14 @@ export class EngineerUiComponent {
         label: 'Verify Integrity',
         variant: 'primary',
         action: () => this._actions.verifyAuditIntegrity()
+      },
+      F5: {
+        label: 'Simulate Tamper',
+        action: () => this._actions.simulateTamper(false)
+      },
+      F6: {
+        label: 'Restore Record',
+        action: () => this._actions.simulateTamper(true)
       },
       F8: {
         label: 'Eject Service Card',
@@ -389,7 +472,7 @@ export class EngineerUiComponent {
             <h2 class="screen-title">CRYPTOGRAPHIC AUDIT LOG (SHA-256 + HMAC)</h2>
             <p class="screen-subtitle">Tamper-evident hash chain of all ledger and hardware events.</p>
           </div>
-          <div style="display:flex; gap:6px;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button
               type="button"
               id="audit-verify-btn"
@@ -397,6 +480,22 @@ export class EngineerUiComponent {
               ${state.isBusy ? 'disabled' : ''}
             >
               Verify Hash Chain Integrity
+            </button>
+            <button
+              type="button"
+              id="audit-tamper-btn"
+              class="screen-btn screen-btn-danger"
+              ${state.isBusy ? 'disabled' : ''}
+            >
+              Simulate SQLite Tamper (TC-06)
+            </button>
+            <button
+              type="button"
+              id="audit-restore-btn"
+              class="screen-btn"
+              ${state.isBusy ? 'disabled' : ''}
+            >
+              Restore Tampered Record
             </button>
           </div>
         </div>
@@ -425,6 +524,14 @@ export class EngineerUiComponent {
 
     qs('#audit-verify-btn', this._viewportEl)?.addEventListener('click', () => {
       this._actions.verifyAuditIntegrity();
+    });
+
+    qs('#audit-tamper-btn', this._viewportEl)?.addEventListener('click', () => {
+      this._actions.simulateTamper(false);
+    });
+
+    qs('#audit-restore-btn', this._viewportEl)?.addEventListener('click', () => {
+      this._actions.simulateTamper(true);
     });
   }
 }

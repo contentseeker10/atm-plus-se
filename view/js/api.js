@@ -190,5 +190,27 @@ export const api = {
         'X-Master-Key': masterKey
       }
     );
+  },
+  unlockCard(token, masterKey, cardNumber) {
+    return request(
+      'POST',
+      '/engineer/unlock-card',
+      { cardNumber },
+      {
+        Authorization: `Bearer ${token}`,
+        'X-Master-Key': masterKey
+      }
+    );
+  },
+  simulateTamper(token, masterKey, restore = false) {
+    return request(
+      'POST',
+      '/engineer/simulate-tamper',
+      { restore },
+      {
+        Authorization: `Bearer ${token}`,
+        'X-Master-Key': masterKey
+      }
+    );
   }
 };

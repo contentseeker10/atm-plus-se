@@ -15,6 +15,7 @@ import { EngineerUiComponent } from './components/engineer-ui.js';
 import { InactivityTimer } from './utils/timer.js';
 import {
   escapeHtml,
+  formatCents,
   maskCardNumber,
   qs,
   qsa,
@@ -146,6 +147,10 @@ class AtmSimulatorApp {
         toggleVaultDoor: (open) => this.handleToggleVaultDoor(open),
         replenishCassette: (cassetteIndex, addCount) =>
           this.handleReplenishCassette(cassetteIndex, addCount),
+        replaceCassette: (cassetteIndex, setCount) =>
+          this.handleReplaceCassette(cassetteIndex, setCount),
+        unlockCard: (cardNumber) => this.handleUnlockCard(cardNumber),
+        simulateTamper: (restore) => this.handleSimulateTamper(restore),
         resetHardwareCounters: () => this.handleResetHardwareCounters(),
         openAuditView: (customAlert = null) => this.handleOpenAuditView(customAlert),
         verifyAuditIntegrity: () => this.handleVerifyIntegrity()
@@ -194,6 +199,34 @@ class AtmSimulatorApp {
     }
   }
 
+  _updateWalletCardOverride(cardNumber, patch) {
+    if (!cardNumber) return;
+    const current = store.getState().cardStatusOverrides || {};
+    const nextOverrides = {
+      ...current,
+      [cardNumber]: {
+        ...(current[cardNumber] || {}),
+        ...patch
+      }
+    };
+    store.setState({ cardStatusOverrides: nextOverrides });
+  }
+
+  _syncWalletAccountsHint(cardNumber, accounts) {
+    if (!cardNumber || !Array.isArray(accounts) || accounts.length === 0) return;
+    const checking = accounts.find((a) => a.type === 'Checking');
+    const savings = accounts.find((a) => a.type === 'Savings');
+    const parts = [];
+    if (checking) parts.push(`${checking.id || 'CHK'} (${formatCents(checking.balance)})`);
+    if (savings) parts.push(`${savings.id || 'SAV'} (${formatCents(savings.balance)})`);
+    if (parts.length > 0) {
+      this._updateWalletCardOverride(cardNumber, {
+        accountsHint: parts.join(' / '),
+        blocked: false
+      });
+    }
+  }
+
   async _withBusy(busyMessage, fn) {
     store.setState({ isBusy: true, busyMessage, alert: null });
     try {
@@ -233,6 +266,9 @@ class AtmSimulatorApp {
       });
     } catch (err) {
       this._cardSlot.setLedState('error');
+      if (err.errorCode === 'CardBlocked' || err.errorCode === 'MaxAttemptsExceeded') {
+        this._updateWalletCardOverride(cardNumber, { blocked: true });
+      }
       store.setState({
         isBusy: false,
         busyMessage: '',
@@ -277,6 +313,8 @@ class AtmSimulatorApp {
         api.getCustomerAccounts(res.token)
       );
 
+      this._syncWalletAccountsHint(cardNumber, accData.accounts || []);
+
       store.setState({
         fsmState: FSM_STATES.CUSTOMER_SESSION,
         customerView: CUSTOMER_VIEWS.MENU,
@@ -298,6 +336,7 @@ class AtmSimulatorApp {
       const cardBlocked = err.payload?.cardBlocked || err.errorCode === 'MaxAttemptsExceeded';
 
       if (cardBlocked) {
+        this._updateWalletCardOverride(cardNumber, { blocked: true });
         this._timer.stop();
         this._cardSlot.triggerEjectAnimation();
         store.resetSession({
@@ -353,6 +392,7 @@ class AtmSimulatorApp {
       );
 
       this._pendingReceipt = res.receipt || null;
+      this._syncWalletAccountsHint(store.getState().cardNumber, res.accounts || []);
       const overdraftNote =
         res.overdraftCoveredCents > 0
           ? ` (Includes $${(res.overdraftCoveredCents / 100).toFixed(2)} overdraft protection from Savings)`
@@ -416,6 +456,7 @@ class AtmSimulatorApp {
 
       this._billAcceptor.clearStagedBills();
       this._pendingReceipt = res.receipt || null;
+      this._syncWalletAccountsHint(store.getState().cardNumber, res.accounts || []);
 
       const sweepNote =
         res.overflowSweptCents > 0
@@ -455,6 +496,7 @@ class AtmSimulatorApp {
       );
 
       this._pendingReceipt = res.receipt || null;
+      this._syncWalletAccountsHint(store.getState().cardNumber, res.accounts || []);
 
       const protectionNotes = [];
       if (res.overdraftCoveredCents > 0) {
@@ -559,6 +601,7 @@ class AtmSimulatorApp {
       );
       const executed = res.executed ?? 0;
       const failures = res.failures ?? 0;
+      this._syncWalletAccountsHint(store.getState().cardNumber, res.accounts || []);
       store.setState({
         accounts: res.accounts || store.getState().accounts,
         apsRules: res.rules || store.getState().apsRules,
@@ -721,6 +764,60 @@ class AtmSimulatorApp {
     }
   }
 
+  async handleReplaceCassette(cassetteIndex, setCount) {
+    const { token, masterKey } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      await this._withBusy(
+        `SETTING CASSETTE #${cassetteIndex + 1} TO ${setCount} NOTES...`,
+        () => api.replenishCassette(token, masterKey, { cassetteIndex, setCount })
+      );
+      const vaultStatus = await api.getVaultDiagnostics(token, masterKey);
+      store.setState({
+        vaultStatus,
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'success',
+          message: `Cassette #${cassetteIndex + 1} set to ${setCount} banknotes.`
+        }
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: `[${err.errorCode || 'ReplenishError'}] ${err.message}` }
+      });
+    }
+  }
+
+  async handleUnlockCard(cardNumber) {
+    const { token, masterKey } = store.getState();
+    if (!token || !masterKey || !cardNumber) return;
+
+    try {
+      await this._withBusy(`UNLOCKING CARD ${maskCardNumber(cardNumber)}...`, () =>
+        api.unlockCard(token, masterKey, cardNumber)
+      );
+      this._updateWalletCardOverride(cardNumber, { blocked: false });
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: 'success',
+          message: `Card ${cardNumber} unlocked and PIN retry counter reset.`
+        }
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: `[${err.errorCode || 'CardUnlockError'}] ${err.message}` }
+      });
+    }
+  }
+
   async handleResetHardwareCounters() {
     const { token, masterKey } = store.getState();
     if (!token || !masterKey) return;
@@ -796,6 +893,42 @@ class AtmSimulatorApp {
         isBusy: false,
         busyMessage: '',
         alert: { type: 'error', message: err.message }
+      });
+    }
+  }
+
+  async handleSimulateTamper(restore = false) {
+    const { token, masterKey } = store.getState();
+    if (!token || !masterKey) return;
+
+    try {
+      await this._withBusy(
+        restore
+          ? 'RESTORING TAMPERED LEDGER ENTRY...'
+          : 'SIMULATING SQLITE AUDIT TAMPER...',
+        () => api.simulateTamper(token, masterKey, restore)
+      );
+      const [auditRes, verifyRes] = await Promise.all([
+        api.getAuditLog(token, masterKey),
+        api.verifyIntegrity(token, masterKey)
+      ]);
+      store.setState({
+        auditRecords: auditRes.records || [],
+        integrityStatus: verifyRes,
+        isBusy: false,
+        busyMessage: '',
+        alert: {
+          type: verifyRes.valid ? 'success' : 'error',
+          message: restore
+            ? `Tampered record restored. ${verifyRes.detail}`
+            : `SQLite audit record altered externally! ${verifyRes.detail}`
+        }
+      });
+    } catch (err) {
+      store.setState({
+        isBusy: false,
+        busyMessage: '',
+        alert: { type: 'error', message: `[${err.errorCode || 'TamperSimError'}] ${err.message}` }
       });
     }
   }
