@@ -465,3 +465,185 @@ VALUES ('4000000000000099', 'yosyp', 'hash', 'salt', 0, 'CHK-CACHE');
 
     done();
 }
+
+TEST(controller_qa_fixes_and_service_ops)
+{
+    begin("Controller QA fixes: anti-replay, transfer protection, APS, tamper lock and service ops");
+
+    constexpr std::string_view card1 = "4111000000000001";
+    constexpr std::string_view card2 = "4111000000000002";
+    constexpr std::string_view eng_card = "9999000000000001";
+
+    const std::string hash1 = crypto::sha256_hex("1234", "s1");
+    const std::string hash2 = crypto::sha256_hex("4321", "s2");
+    const std::string eng_hash = crypto::sha256_hex("0000", "se");
+
+    auto db = std::make_shared<DatabaseManager>(":memory:");
+    const std::string sql = std::format(R"sql(
+INSERT INTO accounts (account_id, client_id, type, balance_cents, annual_interest_rate, minimum_balance_cents)
+VALUES ('SAV-A', 'c1', 'savings', 30000, 0.0, 0),
+       ('SAV-B', 'c2', 'savings', 20000, 0.0, 0);
+
+INSERT INTO accounts (account_id, client_id, type, balance_cents, client_min_cents, overflow_max_cents, linked_savings_id)
+VALUES ('CHK-A', 'c1', 'checking', 50000, 10000, 100000, 'SAV-A'),
+       ('CHK-B', 'c2', 'checking', 80000, 0, 100000, 'SAV-B');
+
+INSERT INTO cards (card_number, card_holder, pin_hash, salt, role, is_blocked, is_expired, failed_attempts, checking_account_id)
+VALUES ('{0}', 'Client One', '{1}', 's1', 0, 0, 0, 0, 'CHK-A'),
+       ('{2}', 'Client Two', '{3}', 's2', 0, 0, 0, 0, 'CHK-B'),
+       ('{4}', 'Engineer', '{5}', 'se', 1, 0, 0, 0, NULL);
+
+INSERT INTO vault_cassettes (denomination_cents, bill_count, capacity)
+VALUES (10000, 10, 100), (5000, 10, 100);
+)sql",
+                                        card1, hash1, card2, hash2, eng_card, eng_hash);
+
+    const bool seeded = db->execute_transaction([&sql](sqlite3* raw)
+                                                { return storage::exec(raw, sql.c_str()).has_value(); })
+                            .has_value();
+    CHECK(seeded);
+
+    std::map<Denomination, Cassette> cassettes;
+    const bool loaded = db->execute_transaction(
+                              [&cassettes](sqlite3* raw)
+                              {
+                                  auto c = storage::load_cassettes(raw);
+                                  if (!c) return false;
+                                  cassettes = std::move(*c);
+                                  return true;
+                              })
+                            .has_value();
+    CHECK(loaded);
+
+    auto audit = std::make_shared<AuditLog>(db, "test-hmac-secret");
+    auto replay = std::make_shared<AntiReplayManager>();
+    auto ledger = std::make_shared<LedgerService>(audit, replay);
+    AtmController atm{std::make_unique<CashVault>(std::move(cassettes)), db, audit,
+                      std::make_unique<AuthService>(db, audit), ledger, replay};
+
+    CHECK(atm.process_insert_card(card1).has_value());
+    CHECK(atm.process_enter_pin("1234").has_value());
+
+    const auto wd1 = atm.process_withdraw(10000, "Checking", "wd-key-1", 1);
+    CHECK(wd1.has_value());
+    CHECK(wd1 && wd1->accounts.checking_balance_cents == 40000);
+    CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 9);
+
+    const auto wd_dup_key = atm.process_withdraw(10000, "Checking", "wd-key-1", 2);
+    CHECK(!wd_dup_key.has_value());
+    CHECK(wd_dup_key.error() == AtmError::ReplayAttackDetected);
+    CHECK((*db->load_account("CHK-A"))->get_balance() == 40000);
+    CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 9);
+
+    const auto wd_stale_nonce = atm.process_withdraw(10000, "Checking", "wd-key-2", 1);
+    CHECK(!wd_stale_nonce.has_value());
+    CHECK(wd_stale_nonce.error() == AtmError::ReplayAttackDetected);
+    CHECK((*db->load_account("CHK-A"))->get_balance() == 40000);
+
+    const auto dep1 = atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-1", 2);
+    CHECK(dep1.has_value());
+    CHECK(dep1 && dep1->accounts.checking_balance_cents == 50000);
+    CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 10);
+
+    const auto dep_dup_key = atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-1", 3);
+    CHECK(!dep_dup_key.has_value());
+    CHECK(dep_dup_key.error() == AtmError::ReplayAttackDetected);
+    CHECK((*db->load_account("CHK-A"))->get_balance() == 50000);
+    CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 10);
+
+    const auto dep_stale_nonce = atm.process_deposit({Denomination::D_100}, "Checking", "dep-key-2", 2);
+    CHECK(!dep_stale_nonce.has_value());
+    CHECK(dep_stale_nonce.error() == AtmError::ReplayAttackDetected);
+    CHECK((*db->load_account("CHK-A"))->get_balance() == 50000);
+
+    const auto wd2 = atm.process_withdraw(10000, "Checking", "wd-key-3", 3);
+    CHECK(wd2.has_value());
+    CHECK(wd2 && wd2->accounts.checking_balance_cents == 40000);
+
+    const auto tr = atm.process_transfer("Checking", card2, 35000, "tr-key-1", 4);
+    CHECK(tr.has_value());
+    if (tr)
+    {
+        CHECK(tr->overdraft_covered_cents == 5000);
+        CHECK(tr->overflow_swept_cents == 15000);
+        CHECK(tr->accounts.checking_balance_cents == 10000);
+        CHECK(tr->accounts.savings_balance_cents == 25000);
+    }
+    CHECK((*db->load_account("CHK-B"))->get_balance() == 100000);
+    CHECK((*db->load_account("SAV-B"))->get_balance() == 35000);
+
+    const auto rule = atm.create_customer_aps_rule("Savings", "Checking", 5000, true, 3600);
+    CHECK(rule.has_value());
+    const auto rules_list = atm.get_customer_aps_rules();
+    CHECK(rules_list.has_value() && rules_list->size() == 1);
+
+    const auto aps_run = atm.run_customer_aps();
+    CHECK(aps_run.has_value());
+    if (aps_run)
+    {
+        CHECK(aps_run->run.executed == 1);
+        CHECK(aps_run->accounts.savings_balance_cents == 20000);
+        CHECK(aps_run->accounts.checking_balance_cents == 15000);
+    }
+
+    if (rule)
+    {
+        CHECK(atm.delete_customer_aps_rule(rule->rule_id).has_value());
+    }
+    const auto rules_after = atm.get_customer_aps_rules();
+    CHECK(rules_after.has_value() && rules_after->empty());
+
+    CHECK(atm.process_eject_card().has_value());
+
+    CHECK(atm.process_insert_card(card2).has_value());
+    CHECK(atm.process_enter_pin("9999").error() == AtmError::InvalidPin);
+    CHECK(atm.process_enter_pin("9999").error() == AtmError::InvalidPin);
+    CHECK(atm.process_enter_pin("9999").error() == AtmError::MaxAttemptsExceeded);
+    CHECK(atm.process_insert_card(card2).error() == AtmError::CardBlocked);
+
+    CHECK(atm.process_insert_card(eng_card).has_value());
+    CHECK(atm.process_enter_pin("0000").has_value());
+    CHECK(atm.process_replace_cassette(Denomination::D_100, 0).error() == AtmError::VaultAccessDenied);
+    CHECK(atm.process_open_vault("ENG-MASTER-KEY-2026").has_value());
+    CHECK(atm.process_replace_cassette(Denomination::D_100, 0).has_value());
+    CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 0);
+    CHECK(atm.process_replace_cassette(Denomination::D_100, 10).has_value());
+    CHECK(atm.get_vault().get_cassettes().at(Denomination::D_100).get_count() == 10);
+    CHECK(atm.close_vault_door().has_value());
+
+    CHECK(atm.process_unlock_card(card2).has_value());
+    CHECK(atm.simulate_audit_tamper(false).has_value());
+
+    const auto entries_tampered = atm.get_audit_entries();
+    CHECK(entries_tampered.has_value() && !entries_tampered->empty());
+    if (entries_tampered && !entries_tampered->empty())
+    {
+        CHECK(atm.is_audit_entry_tampered(entries_tampered->back()));
+    }
+
+    const auto broken_verify = atm.verify_audit_integrity();
+    CHECK(broken_verify.has_value() && !broken_verify->ok);
+    CHECK(atm.process_eject_card().has_value());
+
+    CHECK(atm.process_insert_card(card2).has_value());
+    CHECK(atm.process_enter_pin("4321").has_value());
+    const auto blocked_wd = atm.process_withdraw(10000);
+    CHECK(!blocked_wd.has_value());
+    CHECK(blocked_wd.error() == AtmError::CryptoVerificationFailed);
+    CHECK(atm.process_eject_card().has_value());
+
+    CHECK(atm.process_insert_card(eng_card).has_value());
+    CHECK(atm.process_enter_pin("0000").has_value());
+    CHECK(atm.simulate_audit_tamper(true).has_value());
+    const auto restored_verify = atm.verify_audit_integrity();
+    CHECK(restored_verify.has_value() && restored_verify->ok);
+    CHECK(atm.process_eject_card().has_value());
+
+    CHECK(atm.process_insert_card(card2).has_value());
+    CHECK(atm.process_enter_pin("4321").has_value());
+    const auto wd_after_restore = atm.process_withdraw(10000);
+    CHECK(wd_after_restore.has_value());
+    CHECK(wd_after_restore && wd_after_restore->accounts.checking_balance_cents == 90000);
+
+    done();
+}

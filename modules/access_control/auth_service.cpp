@@ -64,6 +64,29 @@ std::expected<CardRecord, AuthError> AuthService::authenticate_card(std::string_
     return record;
 }
 
+std::expected<void, AuthError> AuthService::unlock_card(std::string_view card)
+{
+    auto result = _db->unlock_card(card);
+    if (!result)
+    {
+        return std::unexpected(to_auth_error(result.error()));
+    }
+    if (_audit_log)
+    {
+        LedgerEntry entry;
+        entry.debit_account_id = std::string(card);
+        entry.credit_account_id = "SECURITY_AUDIT";
+        entry.amount_cents = 1;
+        entry.operation_type = "CARD_UNLOCKED";
+        auto audit_res = _audit_log->append_record(entry);
+        if (!audit_res)
+        {
+            return std::unexpected(AuthError::DatabaseError);
+        }
+    }
+    return {};
+}
+
 std::expected<CardRecord, AuthError> AuthService::_load_card(std::string_view card, bool validate_only) {
     auto record = _db->load_card(card, validate_only);
     if (!record) {

@@ -15,6 +15,7 @@
 #include "db.hpp"
 
 #include "accounting/audit.hpp"
+#include "accounting/ledger_service.hpp"
 
 #include "atm_state.hpp"
 #include "auth_service.hpp"
@@ -35,7 +36,6 @@ using namespace std::literals::chrono_literals;
 class Account;
 class AntiReplayManager;
 class CashVault;
-class LedgerService;
 
 struct CustomerAccountSnapshot
 {
@@ -67,6 +67,14 @@ struct TransferResult
 {
     std::int64_t source_new_balance_cents{};
     CustomerAccountSnapshot accounts;
+    std::int64_t overdraft_covered_cents{};
+    std::int64_t overflow_swept_cents{};
+};
+
+struct CustomerApsRunResult
+{
+    ApsRunResult run;
+    CustomerAccountSnapshot accounts;
 };
 
 class AtmController
@@ -95,19 +103,34 @@ public:
     std::expected<void, AtmError> process_eject_card();
     std::expected<void, AtmError> process_open_vault(std::string_view engineer_key);
     std::expected<WithdrawResult, AtmError> process_withdraw(
-        int64_t amount_cents, std::string_view account_type = "Checking");
+        int64_t amount_cents, std::string_view account_type = "Checking",
+        std::string_view idempotency_key = "",
+        std::optional<std::uint64_t> incoming_nonce = std::nullopt);
     std::expected<DepositResult, AtmError> process_deposit(
-        const std::vector<Denomination>& bills, std::string_view account_type = "Checking");
-    std::expected<TransferResult, AtmError> process_transfer(std::string_view from_account,
-                                                             std::string_view to_account,
-                                                             std::int64_t amount_cents,
-                                                             std::string_view idempotency_key = "");
+        const std::vector<Denomination>& bills, std::string_view account_type = "Checking",
+        std::string_view idempotency_key = "",
+        std::optional<std::uint64_t> incoming_nonce = std::nullopt);
+    std::expected<TransferResult, AtmError> process_transfer(
+        std::string_view from_account, std::string_view to_account,
+        std::int64_t amount_cents, std::string_view idempotency_key = "",
+        std::optional<std::uint64_t> incoming_nonce = std::nullopt);
     std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
+    std::expected<void, AtmError> process_replace_cassette(Denomination denomination,
+                                                           int new_count);
+    std::expected<void, AtmError> process_unlock_card(std::string_view card_number);
 
     std::expected<CustomerAccountSnapshot, AtmError> get_customer_accounts();
+    std::expected<std::vector<ApsRule>, AtmError> get_customer_aps_rules();
+    std::expected<ApsRule, AtmError> create_customer_aps_rule(
+        std::string_view from_account, std::string_view to_account,
+        std::int64_t amount_cents, bool fixed_amount, std::int64_t period_seconds);
+    std::expected<CustomerApsRunResult, AtmError> run_customer_aps();
+    std::expected<void, AtmError> delete_customer_aps_rule(std::string_view rule_id);
     std::expected<std::vector<LedgerEntry>, AtmError> get_audit_entries(
         std::size_t offset = 0, std::size_t limit = 0);
     std::expected<ChainVerification, AtmError> verify_audit_integrity();
+    bool is_audit_entry_tampered(const LedgerEntry& entry) const;
+    std::expected<void, AtmError> simulate_audit_tamper(bool restore = false);
 
     std::expected<void, AtmError> open_vault_door();
     std::expected<void, AtmError> close_vault_door();
@@ -128,11 +151,16 @@ public:
     { return _current_state->get_state_name(); }
 
 private:
-    inline static constexpr std::chrono::seconds kTimeout = 60s;
+    inline static constexpr std::chrono::seconds kTimeout = 45s;
     inline static constexpr std::string_view kDefaultEngineerKey = "ENG-MASTER-KEY-2026";
 
     std::expected<void, AtmError> require_role(UserRole role);
-    std::expected<void, AtmError> consume_session_nonce();
+    std::expected<void, AtmError> check_customer_replay_guard(
+        std::string_view idempotency_key,
+        std::optional<std::uint64_t> incoming_nonce) const;
+    std::expected<void, AtmError> consume_session_nonce(
+        std::optional<std::uint64_t> incoming_nonce = std::nullopt);
+    void rollback_session_nonce(std::uint64_t previous_nonce);
     std::expected<void, AtmError> commit_operation(
         std::optional<CashVault> next_vault, const std::vector<const Account*>& accounts,
         std::uint64_t nonce, std::size_t audit_mark);

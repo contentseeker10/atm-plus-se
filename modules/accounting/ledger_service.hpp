@@ -72,6 +72,12 @@ struct InvCheckReport
     std::vector<std::string> failures;
 };
 
+struct TransferOutcome
+{
+    std::int64_t overdraft_covered_cents{};
+    std::int64_t overflow_swept_cents{};
+};
+
 class LedgerService
 {
 public:
@@ -84,29 +90,42 @@ public:
                                               std::uint64_t nonce,
                                               std::string_view idempotency_key = "");
 
+    std::expected<TransferOutcome, LedgerError> transfer_with_protection(
+        Account& from, Account& to, std::int64_t amount_cents,
+        SavingsAccount* from_linked_savings, SavingsAccount* to_linked_savings,
+        std::uint64_t nonce, std::string_view idempotency_key = "");
+
     std::expected<void, LedgerError> withdraw_with_overdraft(CheckingAccount& checking,
                                                              SavingsAccount& savings,
                                                              std::int64_t amount_cents,
-                                                             std::uint64_t nonce);
+                                                             std::uint64_t nonce,
+                                                             std::string_view idempotency_key = "");
 
     std::expected<void, LedgerError> deposit_with_overflow(CheckingAccount& checking,
                                                            SavingsAccount& savings,
                                                            std::int64_t amount_cents,
-                                                           std::uint64_t nonce);
+                                                           std::uint64_t nonce,
+                                                           std::string_view idempotency_key = "");
 
     std::expected<void, LedgerError> withdraw_from_account(Account& account,
                                                            std::int64_t amount_cents,
-                                                           std::uint64_t nonce);
+                                                           std::uint64_t nonce,
+                                                           std::string_view idempotency_key = "");
 
     std::expected<void, LedgerError> deposit_to_account(Account& account,
                                                         std::int64_t amount_cents,
-                                                        std::uint64_t nonce);
+                                                        std::uint64_t nonce,
+                                                        std::string_view idempotency_key = "");
 
     std::expected<std::int64_t, LedgerError> accrue_interest(SavingsAccount& savings,
                                                              std::uint64_t nonce,
                                                              int days = 365);
 
     std::expected<void, LedgerError> register_aps_rule(ApsRule rule);
+
+    std::vector<ApsRule> get_aps_rules(std::string_view payer_account_id = "") const;
+
+    bool remove_aps_rule(std::string_view rule_id);
 
     ApsRunResult run_aps(
         std::chrono::system_clock::time_point now,
@@ -121,6 +140,7 @@ public:
                              std::int64_t bank_min_cents) const;
 
     bool integrity_ok() const noexcept;
+    void set_integrity_compromised(bool compromised) noexcept;
 
     std::shared_ptr<AntiReplayManager> get_anti_replay() const noexcept
     { return _anti_replay; }

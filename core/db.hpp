@@ -46,6 +46,7 @@ public:
 
     std::expected<CardRecord, DbError> load_card(std::string_view card, bool validate_only);
     std::expected<void, DbError>       block_card(std::string_view card);
+    std::expected<void, DbError>       unlock_card(std::string_view card);
     std::expected<int, DbError>        get_failed_attempts(std::string_view card);
     std::expected<void, DbError>       set_failed_attempts(std::string_view card, int amount);
 private:

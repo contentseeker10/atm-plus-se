@@ -15,7 +15,11 @@
 #include "crypto.hpp"
 
 #include "storage/operations.hpp"
+#include "storage/sqlite_utils.hpp"
 
+#include <sqlite3.h>
+
+#include <algorithm>
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
@@ -179,6 +183,37 @@ std::expected<ChainVerification, CryptoError> AuditLog::verify_integrity_chain()
     result.ok = true;
     result.checked_records = _entries.size();
 
+    std::unordered_map<std::string, LedgerEntry> db_by_tx_id;
+    bool has_db = false;
+    if (_db)
+    {
+        std::vector<LedgerEntry> db_entries;
+        const auto q = _db->execute_transaction(
+            [&db_entries](sqlite3* raw)
+            {
+                auto rows = storage::load_ledger_entries(raw);
+                if (!rows) { return false; }
+                db_entries = std::move(*rows);
+                return true;
+            });
+        if (!q) { return std::unexpected(CryptoError::DatabaseError); }
+
+        if (db_entries.size() != _entries.size())
+        {
+            result.ok = false;
+            result.first_broken_index = std::min(db_entries.size(), _entries.size());
+            result.detail = "database record count mismatch";
+            return result;
+        }
+
+        has_db = true;
+        db_by_tx_id.reserve(db_entries.size() * 2);
+        for (auto& db_entry : db_entries)
+        {
+            db_by_tx_id.emplace(db_entry.tx_id, std::move(db_entry));
+        }
+    }
+
     try
     {
         std::string prev(64, '0');
@@ -187,20 +222,33 @@ std::expected<ChainVerification, CryptoError> AuditLog::verify_integrity_chain()
         {
             const LedgerEntry& e = _entries[i];
 
-            const std::string expected_hash =
-                crypto::sha256_hex(e.prev_hash + e.to_payload_string());
-            const std::string expected_hmac =
-                crypto::hmac_sha256_hex(e.curr_hash, _hmac_secret_key);
-
             if (!crypto::constant_time_compare(e.prev_hash, prev) ||
-                !crypto::constant_time_compare(e.curr_hash, expected_hash) ||
-                !crypto::constant_time_compare(e.hmac_signature, expected_hmac))
+                is_entry_tampered_unlocked(e))
             {
                 result.ok = false;
                 result.first_broken_index = i;
                 result.detail =
                     std::format("chain link {} broken (prev/hash/HMAC mismatch)", i);
                 return result;
+            }
+
+            if (has_db)
+            {
+                const auto db_it = db_by_tx_id.find(e.tx_id);
+                if (db_it == db_by_tx_id.end() ||
+                    !crypto::constant_time_compare(db_it->second.prev_hash, e.prev_hash) ||
+                    !crypto::constant_time_compare(db_it->second.curr_hash, e.curr_hash) ||
+                    !crypto::constant_time_compare(db_it->second.hmac_signature,
+                                                   e.hmac_signature) ||
+                    db_it->second.to_payload_string() != e.to_payload_string() ||
+                    is_entry_tampered_unlocked(db_it->second))
+                {
+                    result.ok = false;
+                    result.first_broken_index = i;
+                    result.detail = std::format(
+                        "database record {} mismatch or tampered", i);
+                    return result;
+                }
             }
 
             prev = e.curr_hash;
@@ -212,6 +260,23 @@ std::expected<ChainVerification, CryptoError> AuditLog::verify_integrity_chain()
     }
 
     return result;
+}
+
+bool AuditLog::is_entry_tampered_unlocked(const LedgerEntry& entry) const
+{
+    const std::string expected_hash =
+        crypto::sha256_hex(entry.prev_hash + entry.to_payload_string());
+    const std::string expected_hmac =
+        crypto::hmac_sha256_hex(entry.curr_hash, _hmac_secret_key);
+
+    return !crypto::constant_time_compare(entry.curr_hash, expected_hash) ||
+           !crypto::constant_time_compare(entry.hmac_signature, expected_hmac);
+}
+
+bool AuditLog::is_entry_tampered(const LedgerEntry& entry) const
+{
+    std::lock_guard lock(_mtx);
+    return is_entry_tampered_unlocked(entry);
 }
 
 std::vector<LedgerEntry> AuditLog::entries() const
@@ -260,5 +325,56 @@ std::size_t AuditLog::size() const
 void AuditLog::debug_tamper_amount(std::size_t index, std::int64_t new_amount)
 {
     std::lock_guard lock(_mtx);
-    if (index < _entries.size()) { _entries[index].amount_cents = new_amount; }
+    if (index >= _entries.size()) { return; }
+
+    _tampered_original_amounts.try_emplace(index, _entries[index].amount_cents);
+    _entries[index].amount_cents = new_amount;
+
+    if (_db && new_amount > 0)
+    {
+        const std::string& tx_id = _entries[index].tx_id;
+        std::ignore = _db->execute_transaction(
+            [new_amount, &tx_id](sqlite3* raw)
+            {
+                auto stmt = storage::prepare(
+                    raw, "UPDATE ledger_entries SET amount_cents = ?1 WHERE tx_id = ?2");
+                if (!stmt) { return false; }
+                if (sqlite3_bind_int64(stmt->get(), 1, new_amount) != SQLITE_OK ||
+                    storage::bind_text(stmt->get(), 2, tx_id) != SQLITE_OK)
+                {
+                    return false;
+                }
+                return sqlite3_step(stmt->get()) == SQLITE_DONE;
+            });
+    }
+}
+
+void AuditLog::restore_tampered_entries()
+{
+    std::lock_guard lock(_mtx);
+    for (const auto& [index, original_amount] : _tampered_original_amounts)
+    {
+        if (index >= _entries.size()) { continue; }
+        _entries[index].amount_cents = original_amount;
+
+        if (_db && original_amount > 0)
+        {
+            const std::string& tx_id = _entries[index].tx_id;
+            std::ignore = _db->execute_transaction(
+                [original_amount, &tx_id](sqlite3* raw)
+                {
+                    auto stmt = storage::prepare(
+                        raw,
+                        "UPDATE ledger_entries SET amount_cents = ?1 WHERE tx_id = ?2");
+                    if (!stmt) { return false; }
+                    if (sqlite3_bind_int64(stmt->get(), 1, original_amount) != SQLITE_OK ||
+                        storage::bind_text(stmt->get(), 2, tx_id) != SQLITE_OK)
+                    {
+                        return false;
+                    }
+                    return sqlite3_step(stmt->get()) == SQLITE_DONE;
+                });
+        }
+    }
+    _tampered_original_amounts.clear();
 }

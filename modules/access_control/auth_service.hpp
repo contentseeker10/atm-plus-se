@@ -31,6 +31,7 @@ public:
 
     std::expected<CardRecord, AuthError> validate_card(std::string_view card, bool auth = false);
     std::expected<CardRecord, AuthError> authenticate_card(std::string_view card, std::string_view pin);
+    std::expected<void, AuthError>       unlock_card(std::string_view card);
     int get_remaining_attempts(std::string_view card) const;
 private:
     static constexpr int kMaxFailedAttempts{3};

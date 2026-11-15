@@ -242,6 +242,27 @@ namespace storage
         return {};
     }
 
+    std::expected<void, DbError> unlock_card(sqlite3* db, std::string_view card)
+    {
+        auto stmt = prepare(db, sql::kUnlockCard);
+        if (!stmt) return std::unexpected(stmt.error());
+
+        if (const int rc = bind_text(stmt->get(), 1, card); rc != SQLITE_OK)
+        {
+            return std::unexpected(to_db_error(rc));
+        }
+
+        if (const int rc = sqlite3_step(stmt->get()); rc != SQLITE_DONE)
+        {
+            return std::unexpected(to_db_error(rc));
+        }
+        if (sqlite3_changes64(db) == 0)
+        {
+            return std::unexpected(DbError::RecordNotFound);
+        }
+        return {};
+    }
+
     std::expected<int, DbError> get_failed_attempts(sqlite3* db, std::string_view card) {
         auto stmt = prepare(db, sql::kSelectAttempts);
         if (!stmt) {

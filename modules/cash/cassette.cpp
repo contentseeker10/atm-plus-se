@@ -60,3 +60,12 @@ std::expected<void, VaultError> Cassette::remove_bills(int count)
     _current_count -= count;
     return {};
 }
+
+std::expected<void, VaultError> Cassette::set_bills(int count)
+{
+    if (count < 0) return std::unexpected(VaultError::InvalidCount);
+    if (count > _max_capacity) return std::unexpected(VaultError::CassetteFull);
+
+    _current_count = count;
+    return {};
+}

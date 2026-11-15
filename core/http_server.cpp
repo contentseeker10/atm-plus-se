@@ -17,6 +17,7 @@
 
 #include "access_control/atm_controller.hpp"
 #include "accounting/ledger.hpp"
+#include "accounting/ledger_service.hpp"
 #include "cash/cash_vault.hpp"
 
 #include <nlohmann/json.hpp>
@@ -63,6 +64,7 @@ namespace
         case AtmError::InvalidAmount: return "InvalidAmount";
         case AtmError::CassetteFull: return "CassetteFull";
         case AtmError::VaultDoorOpen: return "VaultDoorOpen";
+        case AtmError::VaultDoorClosed: return "VaultDoorClosed";
         case AtmError::CardNotFound: return "CardNotFound";
         case AtmError::CardBlocked: return "CardBlocked";
         case AtmError::InvalidPin: return "InvalidPin";
@@ -95,6 +97,7 @@ namespace
         case AtmError::CassetteFull:
         case AtmError::ReplayAttackDetected:
         case AtmError::CryptoVerificationFailed:
+        case AtmError::VaultDoorClosed:
         case AtmError::InvalidStateTransition: return 409;
         case AtmError::VaultDoorOpen: return 503;
         case AtmError::DatabaseError:
@@ -121,6 +124,7 @@ namespace
         case AtmError::InvalidAmount: return "Invalid amount or unsupported denomination.";
         case AtmError::CassetteFull: return "Cassette capacity exceeded.";
         case AtmError::VaultDoorOpen: return "Vault door is open. Customer operations are locked.";
+        case AtmError::VaultDoorClosed: return "Safe door is closed. Open vault door before servicing cassettes.";
         case AtmError::CardNotFound: return "Unrecognized card number.";
         case AtmError::CardBlocked: return "Card is blocked due to security policy.";
         case AtmError::InvalidPin: return "Incorrect PIN code.";
@@ -320,6 +324,29 @@ namespace
         });
     }
 
+    json build_aps_rule_json(const ApsRule& rule)
+    {
+        return {
+            {"ruleId", rule.rule_id},
+            {"from", rule.payer_account_id},
+            {"to", rule.payee_account_id},
+            {"amountCents", rule.amount_cents},
+            {"fixedAmount", rule.fixed_amount},
+            {"periodSeconds", rule.period.count()},
+            {"runCount", rule.run_count}
+        };
+    }
+
+    json build_aps_rules_json(const std::vector<ApsRule>& rules)
+    {
+        json arr = json::array();
+        for (const auto& rule : rules)
+        {
+            arr.push_back(build_aps_rule_json(rule));
+        }
+        return arr;
+    }
+
     json build_vault_json(const CashVault& vault, int dispense_cycles, int deposit_cycles)
     {
         json cassettes_arr = json::array();
@@ -414,6 +441,33 @@ namespace
 
         return std::nullopt;
     }
+
+    std::string read_idempotency_key(const httplib::Request& req, const json& body)
+    {
+        if (const auto key = read_string(body, "idempotencyKey"); key && !key->empty())
+        {
+            return *key;
+        }
+        if (const std::string header = req.get_header_value("X-Idempotency-Key");
+            !header.empty())
+        {
+            return header;
+        }
+        if (const auto it = body.find("nonce"); it != body.end() && it->is_string())
+        {
+            return it->get<std::string>();
+        }
+        return "";
+    }
+
+    std::optional<std::uint64_t> read_session_nonce(const json& body)
+    {
+        if (const auto val = read_int64(body, "nonce", "sessionNonce"))
+        {
+            return *val <= 0 ? std::uint64_t{0} : static_cast<std::uint64_t>(*val);
+        }
+        return std::nullopt;
+    }
 }
 
 void HttpServerAdapter::_mount_frontend()
@@ -452,7 +506,7 @@ void HttpServerAdapter::_register_routes()
     _server.set_default_headers({
         {"Access-Control-Allow-Origin", allowed_origin},
         {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
-        {"Access-Control-Allow-Headers", "Content-Type, Authorization, X-Master-Key"}
+        {"Access-Control-Allow-Headers", "Content-Type, Authorization, X-Master-Key, X-Idempotency-Key"}
     });
 
     _server.Options(R"(/api/.*)", [](const httplib::Request&, httplib::Response& res)
@@ -491,7 +545,8 @@ void HttpServerAdapter::_register_routes()
             {"requiresPin", true},
             {"cardHolder", holder},
             {"maskedPan", mask_pan(*card_number)},
-            {"remainingAttempts", remaining}
+            {"remainingAttempts", remaining},
+            {"timeoutSeconds", 45}
         });
     });
 
@@ -550,7 +605,8 @@ void HttpServerAdapter::_register_routes()
             {"token", token},
             {"role", role},
             {"cardHolder", holder},
-            {"remainingAttempts", remaining}
+            {"remainingAttempts", remaining},
+            {"timeoutSeconds", 45}
         });
     });
 
@@ -582,9 +638,12 @@ void HttpServerAdapter::_register_routes()
 
         const std::string account_type =
             read_string(*body, "accountType", "account").value_or("Checking");
+        const std::string idemp_key = read_idempotency_key(req, *body);
+        const auto session_nonce = read_session_nonce(*body);
         const auto card = _atm_controller->get_active_card();
 
-        const auto wd = _atm_controller->process_withdraw(*amount, account_type);
+        const auto wd = _atm_controller->process_withdraw(*amount, account_type, idemp_key,
+                                                          session_nonce);
         if (!wd)
         {
             return send_atm_error(res, wd.error());
@@ -635,9 +694,12 @@ void HttpServerAdapter::_register_routes()
 
         const std::string account_type =
             read_string(*body, "accountType", "account").value_or("Checking");
+        const std::string idemp_key = read_idempotency_key(req, *body);
+        const auto session_nonce = read_session_nonce(*body);
         const auto card = _atm_controller->get_active_card();
 
-        const auto dep = _atm_controller->process_deposit(*bills, account_type);
+        const auto dep = _atm_controller->process_deposit(*bills, account_type, idemp_key,
+                                                          session_nonce);
         if (!dep)
         {
             return send_atm_error(res, dep.error());
@@ -680,11 +742,12 @@ void HttpServerAdapter::_register_routes()
             return send_atm_error(res, AtmError::InvalidAmount);
         }
 
-        const std::string nonce =
-            read_string(*body, "nonce", "idempotencyKey").value_or("");
+        const std::string idemp_key = read_idempotency_key(req, *body);
+        const auto session_nonce = read_session_nonce(*body);
         const auto card = _atm_controller->get_active_card();
 
-        const auto tr = _atm_controller->process_transfer(*from, *to, *amount, nonce);
+        const auto tr = _atm_controller->process_transfer(*from, *to, *amount, idemp_key,
+                                                          session_nonce);
         if (!tr)
         {
             return send_atm_error(res, tr.error());
@@ -697,14 +760,103 @@ void HttpServerAdapter::_register_routes()
         }
 
         const std::string pan = card ? card->number : "";
-        const json receipt =
-            build_receipt(pan, tx_type, *from, *amount, tr->source_new_balance_cents);
+        const json receipt = build_receipt(pan, tx_type, *from, *amount,
+                                           tr->source_new_balance_cents,
+                                           tr->overdraft_covered_cents,
+                                           tr->overflow_swept_cents);
 
         send_json(res, 200, {
             {"status", "ok"},
             {"newBalance", tr->source_new_balance_cents},
+            {"overdraftCoveredCents", tr->overdraft_covered_cents},
+            {"overflowSweptCents", tr->overflow_swept_cents},
             {"accounts", build_accounts_json(tr->accounts)},
             {"receipt", receipt}
+        });
+    });
+
+    _server.Get("/api/customer/autopay", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_bearer_token(*_atm_controller, req, res)) return;
+
+        const auto rules = _atm_controller->get_customer_aps_rules();
+        if (!rules) return send_atm_error(res, rules.error());
+
+        send_json(res, 200, {{"rules", build_aps_rules_json(*rules)}});
+    });
+
+    _server.Post("/api/customer/autopay", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_bearer_token(*_atm_controller, req, res)) return;
+
+        const auto body = parse_json_body(req, res);
+        if (!body) return;
+
+        const auto from = read_string(*body, "from", "payerAccountId");
+        const auto to = read_string(*body, "to", "payeeAccountId");
+        const auto amount = read_int64(*body, "amount", "amountCents");
+        if (!from || !to || from->empty() || to->empty() || !amount)
+        {
+            return send_atm_error(res, AtmError::InvalidAmount);
+        }
+
+        bool fixed_amount = true;
+        if (const auto it = body->find("fixedAmount"); it != body->end() && it->is_boolean())
+        {
+            fixed_amount = it->get<bool>();
+        }
+        const std::int64_t period_seconds =
+            read_int64(*body, "periodSeconds").value_or(0);
+
+        const auto created = _atm_controller->create_customer_aps_rule(
+            *from, *to, *amount, fixed_amount, period_seconds);
+        if (!created) return send_atm_error(res, created.error());
+
+        const auto rules = _atm_controller->get_customer_aps_rules();
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"rule", build_aps_rule_json(*created)},
+            {"rules", rules ? build_aps_rules_json(*rules) : json::array()}
+        });
+    });
+
+    _server.Post("/api/customer/autopay/run", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_bearer_token(*_atm_controller, req, res)) return;
+
+        const auto executed = _atm_controller->run_customer_aps();
+        if (!executed) return send_atm_error(res, executed.error());
+
+        const auto rules = _atm_controller->get_customer_aps_rules();
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"executed", executed->run.executed},
+            {"failures", executed->run.failures},
+            {"accounts", build_accounts_json(executed->accounts)},
+            {"rules", rules ? build_aps_rules_json(*rules) : json::array()}
+        });
+    });
+
+    _server.Post("/api/customer/autopay/delete", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_bearer_token(*_atm_controller, req, res)) return;
+
+        const auto body = parse_json_body(req, res);
+        if (!body) return;
+
+        const auto rule_id = read_string(*body, "ruleId", "id");
+        if (!rule_id || rule_id->empty())
+        {
+            return send_atm_error(res, AtmError::InvalidAmount);
+        }
+
+        const auto deleted = _atm_controller->delete_customer_aps_rule(*rule_id);
+        if (!deleted) return send_atm_error(res, deleted.error());
+
+        const auto rules = _atm_controller->get_customer_aps_rules();
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"rules", rules ? build_aps_rules_json(*rules) : json::array()}
         });
     });
 
@@ -768,17 +920,22 @@ void HttpServerAdapter::_register_routes()
             if (!denom) denom = to_denomination(*d * 100);
         }
 
-        const auto count = read_int64(*body, "addCount", "delta");
-        if (!denom || !count)
+        const auto set_count = read_int64(*body, "setCount", "newCount");
+        const auto add_count = read_int64(*body, "addCount", "delta");
+        if (!denom || (!set_count && !add_count))
         {
             return send_atm_error(res, AtmError::InvalidAmount);
         }
 
-        if (const auto r =
-                _atm_controller->process_replenish(*denom, static_cast<int>(*count));
-            !r)
+        const auto r = set_count
+            ? _atm_controller->process_replace_cassette(*denom, static_cast<int>(*set_count))
+            : _atm_controller->process_replenish(*denom, static_cast<int>(*add_count));
+        if (!r)
         {
-            return send_atm_error(res, r.error());
+            const AtmError mapped =
+                (r.error() == AtmError::VaultAccessDenied) ? AtmError::VaultDoorClosed
+                                                           : r.error();
+            return send_atm_error(res, mapped);
         }
 
         json payload = build_vault_json(_atm_controller->get_vault(),
@@ -836,7 +993,7 @@ void HttpServerAdapter::_register_routes()
                 {"amountCents", e.amount_cents},
                 {"prevHash", e.prev_hash},
                 {"hash", e.curr_hash},
-                {"tampered", false}
+                {"tampered", _atm_controller->is_audit_entry_tampered(e)}
             });
         }
         send_json(res, 200, {{"records", records}});
@@ -859,6 +1016,50 @@ void HttpServerAdapter::_register_routes()
             {"checkedRecords", verification->checked_records},
             {"brokenRecordId", verification->ok ? json(nullptr) : json(verification->first_broken_index + 1)},
             {"detail", detail}
+        });
+    });
+
+    _server.Post("/api/engineer/simulate-tamper", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_engineer_headers(*_atm_controller, req, res)) return;
+
+        const auto body = parse_json_body(req, res);
+        if (!body) return;
+
+        bool restore = false;
+        if (const auto it = body->find("restore"); it != body->end() && it->is_boolean())
+        {
+            restore = it->get<bool>();
+        }
+
+        const auto r = _atm_controller->simulate_audit_tamper(restore);
+        if (!r) return send_atm_error(res, r.error());
+
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"restored", restore}
+        });
+    });
+
+    _server.Post("/api/engineer/unlock-card", [this](const httplib::Request& req, httplib::Response& res)
+    {
+        if (!verify_engineer_headers(*_atm_controller, req, res)) return;
+
+        const auto body = parse_json_body(req, res);
+        if (!body) return;
+
+        const auto card_number = read_string(*body, "cardNumber", "pan");
+        if (!card_number || card_number->empty())
+        {
+            return send_atm_error(res, AtmError::CardNotFound);
+        }
+
+        const auto r = _atm_controller->process_unlock_card(*card_number);
+        if (!r) return send_atm_error(res, r.error());
+
+        send_json(res, 200, {
+            {"status", "ok"},
+            {"cardNumber", *card_number}
         });
     });
 }

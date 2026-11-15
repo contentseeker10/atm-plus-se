@@ -101,6 +101,12 @@ std::expected<void, DbError> DatabaseManager::block_card(std::string_view card) 
     return storage::block_card(_db_handle.get(), card);
 }
 
+std::expected<void, DbError> DatabaseManager::unlock_card(std::string_view card)
+{
+    std::scoped_lock lock{_db_mutex};
+    return storage::unlock_card(_db_handle.get(), card);
+}
+
 std::expected<int, DbError> DatabaseManager::get_failed_attempts(std::string_view card) {
     std::scoped_lock lock{_db_mutex};
     return storage::get_failed_attempts(_db_handle.get(), card);

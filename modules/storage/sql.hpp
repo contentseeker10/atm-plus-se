@@ -119,6 +119,9 @@ WHERE card_number = ?1
     inline constexpr std::string_view kUpdateBlocked =
         "UPDATE cards SET is_blocked = ?1 WHERE card_number = ?2";
 
+    inline constexpr std::string_view kUnlockCard =
+        "UPDATE cards SET is_blocked = 0, failed_attempts = 0 WHERE card_number = ?1";
+
     inline constexpr std::string_view kSelectAttempts =
         "SELECT failed_attempts FROM cards WHERE card_number = ?1";
 

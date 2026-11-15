@@ -35,6 +35,8 @@ public:
 
     std::expected<void, VaultError> remove_bills(int count);
 
+    std::expected<void, VaultError> set_bills(int count);
+
 private:
     Denomination _denomination;
     int _current_count;

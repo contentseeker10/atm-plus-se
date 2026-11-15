@@ -53,6 +53,7 @@ enum class AtmError
     InvalidAmount,
     CassetteFull,
     VaultDoorOpen,
+    VaultDoorClosed,
     CardNotFound,
     CardBlocked,
     InvalidPin,
