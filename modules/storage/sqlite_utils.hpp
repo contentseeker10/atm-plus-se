@@ -40,4 +40,6 @@ namespace storage
     std::string column_text(sqlite3_stmt* stmt, int column);
 
     std::optional<std::string> column_optional_text(sqlite3_stmt* stmt, int column);
-} // namespace storage
+
+    void finalize_cached_statements(sqlite3* db) noexcept;
+}

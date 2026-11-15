@@ -27,7 +27,10 @@
 #include <stdexcept>
 
 void DatabaseManager::SqliteDeleter::operator()(sqlite3* db) const noexcept
-{ sqlite3_close(db); }
+{
+    storage::finalize_cached_statements(db);
+    sqlite3_close(db);
+}
 
 DatabaseManager::DatabaseManager(std::string_view path) : _db_path{path}
 {
