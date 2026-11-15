@@ -18,7 +18,9 @@
 #include "ledger.hpp"
 
 #include <atomic>
+#include <cstddef>
 #include <expected>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -29,6 +31,7 @@ struct ChainVerification
     bool ok{};
     std::size_t first_broken_index{};
     std::string detail;
+    std::size_t checked_records{};
 };
 
 class AuditLog
@@ -52,6 +55,8 @@ public:
 
     std::vector<LedgerEntry> entries() const;
     std::vector<LedgerEntry> entries_from(std::size_t start_index) const;
+    std::vector<LedgerEntry> entries_page(std::size_t offset, std::size_t limit) const;
+    void for_each_entry(const std::function<void(const LedgerEntry&)>& fn) const;
 
     std::shared_ptr<const std::string> get_last_hash() const noexcept;
     std::size_t size() const;

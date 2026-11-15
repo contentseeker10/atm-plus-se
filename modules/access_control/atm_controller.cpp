@@ -630,7 +630,8 @@ std::expected<CustomerAccountSnapshot, AtmError> AtmController::get_customer_acc
     return make_account_snapshot(*accounts);
 }
 
-std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entries()
+std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entries(
+    std::size_t offset, std::size_t limit)
 {
     std::unique_lock lock(_mtx);
 
@@ -638,7 +639,11 @@ std::expected<std::vector<LedgerEntry>, AtmError> AtmController::get_audit_entri
         return std::unexpected(session.error());
     if (!_audit_log) return std::unexpected(AtmError::InternalError);
 
-    return _audit_log->entries();
+    if (offset == 0 && limit == 0)
+    {
+        return _audit_log->entries();
+    }
+    return _audit_log->entries_page(offset, limit);
 }
 
 std::expected<ChainVerification, AtmError> AtmController::verify_audit_integrity()

@@ -105,7 +105,8 @@ public:
     std::expected<void, AtmError> process_replenish(Denomination denomination, int count);
 
     std::expected<CustomerAccountSnapshot, AtmError> get_customer_accounts();
-    std::expected<std::vector<LedgerEntry>, AtmError> get_audit_entries();
+    std::expected<std::vector<LedgerEntry>, AtmError> get_audit_entries(
+        std::size_t offset = 0, std::size_t limit = 0);
     std::expected<ChainVerification, AtmError> verify_audit_integrity();
 
     std::expected<void, AtmError> open_vault_door();
